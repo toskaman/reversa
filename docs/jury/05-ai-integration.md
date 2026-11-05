@@ -43,3 +43,45 @@ baseline 100% schema-valid, 0% refusal) is green; the capped live
 LLM-vs-baseline runner (`REVERSA_EVAL_LIVE=1`, max 25 cases / 60k tokens,
 anonymized — see `docs/benchmarks/ai-eval-live-PROTOCOL.md`) measures
 only, and only measured numbers are published.
+
+## Cycle 2 — agentic planning (spec'd, not yet measured)
+
+Design: `docs/superpowers/specs/2026-11-05-cycle2-agentic-design.md`.
+AI proposes, deterministic disposes — `validate.py` stays the authority.
+Binding non-goals: no multi-turn dialogue state, no LLM-generated
+questions, no new connectors, no new infra, no prompt-chain agents,
+no UI redesign. Nothing below is measured yet: no new numbers are
+claimed until the eval campaign re-runs.
+
+- **Intent gate (planned, `planner/intent.py`):** deterministic
+  classifier — `onboarding | offboarding | escalation | ambiguous |
+  offscope` — via keyword rules + capability match. Pure function,
+  fully unit-tested. Today there is no gate: the baseline emits the
+  onboarding template with a warning for non-matching intents
+  (measured: 100% schema-valid, 0% refusal over the 100-case
+  offline set).
+- **Clarification contract (planned):** `ambiguous` → HTTP 200
+  `{status: "needs_clarification", questions: [...]}` (max 3
+  deterministic questions from missing slots; LLM-generated
+  questions explicitly out of scope). No workflow created.
+  Rate-limited as intents. Today ambiguity surfaces as
+  `NEEDS_CLARIFICATION` inside the 422 `PLAN_REJECTED` path (AI
+  provider only; pinned offline in `test_agentic_refusal.py`, never
+  measured live).
+- **Refusal contract (planned):** `offscope` → `{status: "refused",
+  code, reason}` reusing `REFUSAL_CODES` in `validate.py` (today:
+  `OUT_OF_SCOPE`, `NEEDS_CLARIFICATION`). No workflow. Today
+  refusal is the same 422 `PLAN_REJECTED` path with `OUT_OF_SCOPE`
+  (offline-pinned; the n=30 live campaign ran before structured
+  refusal existed, so its 0% refusal rate must not be quoted as
+  current behavior).
+- **New templates (planned):** deterministic `offboarding` and
+  `escalation` builders beside `templates/onboarding.py`, real
+  registered capabilities only, each with steps, deps,
+  preconditions, compensations, approval policy. Today only the
+  10-step onboarding graph exists.
+- **Eval (planned):** the live campaign (n=30 to date) re-runs
+  capped (max N calls, fixed model) over the new contracts, and the
+  deterministic-vs-Vultr comparison is appended to
+  `docs/benchmarks/ai-eval-live-RESULTS.md` — never rewritten.
+  Until then the only live AI numbers are the n=30 campaign above.

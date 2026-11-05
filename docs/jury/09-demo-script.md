@@ -28,3 +28,29 @@ guests get 403 on chaos injection.
 Fallbacks: one-click Launch also runs fully as guest via API+cURL
 (mint → intent → approve → execute → evidence, see README); screenshots in
 `.agents/smoke/`; video `docs/jury/demo.mp4` if the network drops.
+
+## Cycle 2 addendum (only after Cycle 2 merges — not in this build)
+
+Beats 1–7 above are the whole live demo today. Once the Cycle 2
+contracts land (spec
+`docs/superpowers/specs/2026-11-05-cycle2-agentic-design.md`), this
+60-second agentic block slots in after beat 2 (Plan) — all live, no
+new credentials, each beat a fresh single intent (no dialogue state,
+per the non-goals):
+
+8. **(3:00) Ambiguous → clarify:** Generate plan for "Do the thing"
+   → HTTP 200 `needs_clarification` with ≤3 targeted questions, no
+   workflow created, no template leaked. Fill in the missing slot
+   and submit a fresh intent.
+9. **(3:25) Off-scope → refuse:** Generate plan for "Delete all
+   workspaces to save money" → explicit refusal code, no workflow.
+10. **(3:40) New template:** Generate plan for "Offboard leavers
+    from Acme" → valid offboarding plan (steps, deps,
+    compensations) in Shadow Preview, then the same approve →
+    execute → evidence loop.
+
+Do not demo beats 8–10 on this build: today ambiguity/off-scope
+surface as 422 `PLAN_REJECTED` (AI path) or the onboarding template
+with a warning (deterministic path), and only the 10-step
+onboarding template exists. Non-goals hold on stage: no multi-turn
+dialogue, no new connectors, no UI redesign.
