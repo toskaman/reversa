@@ -12,13 +12,13 @@ were present in the environment when the counts were observed.
 
 ## RC4 — Cycle 1 merge + P0 hardening (0.2.0-rc.4)
 
-- Commit: `TBD` ("V3 Cycle 1 merge + P0 fixes (0.2.0-rc.4)"), tag
-  `v0.2.0-rc.4`, 2026-11-05. (Hash + CI recorded in the follow-up
-  release-record commit once CI is green.)
+- Commit: `3680cca` ("V3 Cycle 1 merge + P0 fixes (0.2.0-rc.4)"),
+  tag `v0.2.0-rc.4`, 2026-11-05.
 - API suite: **363 passed, 2 skipped, 0 failed** — 365 collected.
   Delta +105 vs RC3 (Cycle 1 agent suites + P0 repro tests, all observed
   on the merged tree before commit).
-- CI: 4/4 jobs (api, web, docker, secrets-scan) — result pending.
+- CI: 4/4 jobs green on the RC commit (run 42084171882: api 1m26s,
+  web 40s, docker 1m07s, secrets-scan 6s).
 - Web: `tsc --noEmit` clean, `next build` 13/13 pages.
 
 ### Added (V3 Cycle 1, merged)
