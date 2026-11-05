@@ -1,0 +1,11 @@
+﻿.venv/
+node_modules/
+__pycache__/
+*.pyc
+.pytest_cache/
+data/
+*.db
+*.db-journal
+.env
+.next/
+.agents/smoke/*.png

@@ -1,0 +1,27 @@
+name: ci
+on:
+  push:
+    branches: [main]
+  pull_request:
+jobs:
+  api:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install -e "reversa/apps/api[dev]"
+      - run: python -m pytest reversa/apps/api/tests -q
+  web:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+          cache: npm
+          cache-dependency-path: reversa/apps/web/package-lock.json
+      - run: npm ci --prefix reversa/apps/web
+      - run: npm run --prefix reversa/apps/web lint
+      - run: npm run --prefix reversa/apps/web build

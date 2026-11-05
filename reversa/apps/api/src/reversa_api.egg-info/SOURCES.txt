@@ -1,0 +1,7 @@
+pyproject.toml
+src/reversa_api/db.py
+src/reversa_api.egg-info/PKG-INFO
+src/reversa_api.egg-info/SOURCES.txt
+src/reversa_api.egg-info/dependency_links.txt
+src/reversa_api.egg-info/requires.txt
+src/reversa_api.egg-info/top_level.txt
