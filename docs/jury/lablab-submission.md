@@ -56,5 +56,7 @@ saga, self-healing, vultr, workflows
 - Demo: https://217.69.3.211.nip.io
 - Code: https://github.com/toskaman/reversa
 - Video: (upload docs/jury/demo.mp4)
-- Slides: docs/jury/slides.md
+- Slides: docs/jury/slides.pdf (source: docs/jury/build_slides.py + slides.md)
+- Cover: docs/jury/cover.png (16:10) or cover-16x9.png (16:9)
+- Gallery: docs/jury/gallery/ (8 authentic captures)
 - Evidence: run any workflow → Evidence → Download JSON
