@@ -10,6 +10,39 @@ Skips in all releases are the same two honest conditional skips
 (Vultr live-provider eval, GitHub live cycle); no Vultr/GitHub secrets
 were present in the environment when the counts were observed.
 
+## V2-04 — Guest isolation P0, zero-token Jury Mode, CM 20/20 (RC1)
+
+- Commit: `63bdada` ("V2-04: guest isolation P0, zero-token Jury Mode,
+  CM 20/20, V4-1/V4-5, 0.2.0-rc.1"), tag `v0.2.0-rc.1`, 2026-11-05.
+- API suite: **255 passed, 2 skipped, 0 failed (VERIFIED by orchestrator
+  re-run on the merged tree)** — 257 collected, ~66 s (same standing
+  Starlette warning). Delta +51 vs V2-03.
+- CI: 4/4 jobs green on the RC commit (api, web, docker, secrets-scan).
+
+### Added
+
+- Per-session ephemeral guest orgs (`guest-<sid>`): true A/B isolation
+  with zero schema change; expiry sweeps the org and its rows.
+- Public guest mint (`POST /api/v1/demo/guest-sessions/public`): no
+  credential, fixed 2/2 quotas, chaos-disabled, 5/hr/IP rate limit.
+- Zero-token Jury Mode: Launch Interactive Demo works with no
+  preconfigured token; detail views fall back to the guest token.
+- Chaos matrix 20/20 (CM-14/06/07/16/12/17/18); crash-recovery suite
+  (13 tests); INDETERMINATE + MANUAL_REQUIRED manifest scenarios.
+- `transition_action` public engine helper; unknown evidence format → 422;
+  deprecated SSE `?token=` fallback removed (header + `?ticket=` remain).
+- A11y pass (contrast AA, focus-visible, skip-link, reduced-motion);
+  Execution Comparison rename; ManifestPanel on Race/Time Machine.
+- Concurrency bench results (`docs/benchmarks/concurrency-results.md`);
+  rollback runbook; RC release notes (`.agents/release-v0.2.0-rc.1.md`).
+
+### Fixed
+
+- V4-1 guest quota race: per-session asyncio lock across quota check +
+  route (threaded regression test proves exact-quota admission).
+- V4-5 guest detail views: central token fallback (owner wins, else guest).
+- CI secrets-scan errexit bug (`set +e` around grep; status preserved).
+
 ## V2-03 — Jury Mode, F3/F4, 30-case AI eval, CM 13/20, CI gates, video V2
 
 - Commit: `f777543` ("V2-03: Jury Mode, F3/F4, 30-case AI eval, CM 13/20,
