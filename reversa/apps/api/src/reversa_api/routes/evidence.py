@@ -11,7 +11,7 @@ from sqlalchemy import select
 
 from .. import __version__
 from ..auth import OrgCtx, get_current_org, get_session
-from ..evidence import redact, verify_chain_rows
+from ..evidence import redact, safe_json_loads, verify_chain_rows
 from ..models import ActionRun, Approval, Event, Workflow, utcnow
 
 router = APIRouter(prefix="/api/v1", tags=["evidence"])
@@ -39,19 +39,19 @@ def _bundle(session, wf: Workflow, org_slug: str) -> dict:
             "created_at": wf.created_at.isoformat(),
             "updated_at": wf.updated_at.isoformat(),
         },
-        "plan": json.loads(wf.plan_json or "{}"),
+        "plan": safe_json_loads(wf.plan_json),
         "actions": [
             {"seq": a.seq, "action_type": a.action_type, "connector_id": a.connector_id,
              "state": a.state, "attempt": a.attempt, "max_attempts": a.max_attempts,
              "compensation_capability": a.compensation_capability,
-             "inputs": redact(json.loads(a.input_json or "{}")),
-             "output": redact(json.loads(a.output_json or "{}")),
+             "inputs": redact(safe_json_loads(a.input_json)),
+             "output": redact(safe_json_loads(a.output_json)),
              "error": a.error} for a in actions
         ],
         "events": [
             {"seq": e.seq, "ts": e.ts.isoformat(), "type": e.type, "actor": e.actor,
              "org_id": e.org_id,
-             "payload": redact(json.loads(e.payload_json or "{}")),
+             "payload": redact(safe_json_loads(e.payload_json)),
              "prev_hash": e.prev_hash, "hash": e.hash} for e in events
         ],
         "approvals": [

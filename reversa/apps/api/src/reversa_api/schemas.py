@@ -2,9 +2,12 @@
 
 from __future__ import annotations
 
+import json
+
+MAX_CUSTOMER_JSON_BYTES = 8192
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 
 class Strict(BaseModel):
@@ -29,10 +32,18 @@ class IntentIn(Strict):
     customer: dict = Field(default_factory=dict)
     use_ai: bool = True
 
+    @field_validator("customer")
+    @classmethod
+    def _bound_customer(cls, v: dict) -> dict:
+        # RT-V5-05: customer merges into plan inputs; cap its size.
+        if len(json.dumps(v, default=str)) > MAX_CUSTOMER_JSON_BYTES:
+            raise ValueError("customer must serialize to at most 8192 bytes")
+        return v
+
 
 class ApproveIn(Strict):
     plan_hash: str
-    decided_by: str = "demo-user"
+    decided_by: str = Field(default="demo-user", max_length=64)
 
 
 class ChaosIn(Strict):

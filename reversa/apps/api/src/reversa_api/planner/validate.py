@@ -59,6 +59,10 @@ REFUSAL_CODES = frozenset({
 
 # Spec §2: a clarification answer carries at most 3 targeted questions.
 MAX_CLARIFICATION_QUESTIONS = 3
+# RT-V5-05: a single step must not seed thousands of resources (legit
+# onboarding provisions a handful of users; templates use 2).
+MAX_PROVISION_USERS = 100
+MAX_USER_EMAIL_LEN = 254
 
 
 def refusal_steps(
@@ -176,10 +180,16 @@ def validate_plan(plan: dict) -> tuple[list[dict], bool, list[ValidationIssue]]:
                 issues.append(ValidationIssue(
                     "BAD_INPUT_TYPE", i, "inputs.users",
                     "'users' must be a non-empty list"))
+            elif len(inputs["users"]) > MAX_PROVISION_USERS:
+                issues.append(ValidationIssue(
+                    "TOO_MANY_USERS", i, "inputs.users",
+                    f"'users' must have at most {MAX_PROVISION_USERS} entries"))
+                continue
             for j, user in enumerate(inputs["users"]):
                 if (not isinstance(user, dict)
                         or not isinstance(user.get("email"), str)
-                        or not user["email"].strip()):
+                        or not user["email"].strip()
+                        or len(user["email"]) > MAX_USER_EMAIL_LEN):
                     issues.append(ValidationIssue(
                         "BAD_INPUT_TYPE", i, f"inputs.users[{j}]",
                         "'users' elements must be objects with a non-empty 'email'"))
@@ -188,7 +198,7 @@ def validate_plan(plan: dict) -> tuple[list[dict], bool, list[ValidationIssue]]:
             "seq": i,
             "action_type": action_type,
             "connector_id": connector_id,
-            "inputs": inputs,
+            "inputs": {k: v for k, v in inputs.items() if k in contract.input_schema},
             "depends_on": depends_on,
             "compensation_capability": contract.compensation_capability,
             "max_attempts": contract.retry_policy.max_attempts,

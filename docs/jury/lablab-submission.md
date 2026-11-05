@@ -10,10 +10,10 @@ AI that doesn't just act. It makes things right.
 
 ## Short description
 
-REVERSA plans multi-system business operations with AI, executes them
-through authorized connectors, verifies every effect, and automatically
-heals recoverable failures with typed compensations — every run sealed in
-a verifiable Evidence Passport. Live demo runs 100% on Vultr.
+REVERSA plans multi-system operations with AI, executes via authorized
+connectors, verifies every effect, and heals failures with typed
+compensations — each run sealed in a verifiable Evidence Passport.
+Live demo on Vultr.
 
 ## Long description
 

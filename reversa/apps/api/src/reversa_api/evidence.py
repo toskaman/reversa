@@ -62,7 +62,21 @@ def _looks_like_secret(value: str) -> bool:
         return False
     import re
 
-    return bool(re.fullmatch(r"[A-Za-z0-9\-_+/=]+", v)) and len(set(v)) > 8
+    # RT-V5-02: dots included so JWT-shaped secrets redact; spaces and
+    # short strings still pass through (sentences, URLs with ':' etc.).
+    return bool(re.fullmatch(r"[A-Za-z0-9\-_+/=.]+", v)) and len(set(v)) > 8
+
+
+def safe_json_loads(raw: str | None) -> Any:
+    """Parse stored JSON for display; corruption renders as a sentinel.
+
+    Export/SSE paths must never 500 on a tampered row: the chain verdict
+    (INVALID) carries the tamper signal, the payload slot shows this.
+    """
+    try:
+        return json.loads(raw or "{}")
+    except (json.JSONDecodeError, TypeError):
+        return {"_unparseable": True}
 
 
 def canonical_bytes(payload: dict) -> bytes:
@@ -134,13 +148,19 @@ def verify_chain_rows(rows: list[Event]) -> tuple[bool, int, str]:
             return False, row.seq, f"sequence gap: expected {expected_seq}, got {row.seq}"
         if row.prev_hash != prev:
             return False, row.seq, f"prev_hash mismatch at seq {row.seq}"
+        try:
+            payload = json.loads(row.payload_json)
+        except (json.JSONDecodeError, TypeError):
+            # RT-V5-03: a crudely tampered row must verify INVALID,
+            # never crash the export with a 500.
+            return False, row.seq, f"payload corrupt at seq {row.seq}"
         body = {
             "workflow_id": row.workflow_id,
             "org_id": row.org_id,
             "seq": row.seq,
             "type": row.type,
             "actor": row.actor,
-            "payload": json.loads(row.payload_json),
+            "payload": payload,
             "prev_hash": row.prev_hash,
         }
         digest = hashlib.sha256(

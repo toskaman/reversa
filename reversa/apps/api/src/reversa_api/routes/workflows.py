@@ -25,7 +25,7 @@ from ..engine.saga import (
     transition_action,
 )
 from ..engine.states import InvalidTransition, check_workflow_transition
-from ..evidence import append_event
+from ..evidence import append_event, safe_json_loads
 from ..models import ActionRun, Approval, Event, Organization, Workflow, as_naive_utc, utcnow
 from ..planner import (
     REFUSAL_CODES,
@@ -521,11 +521,14 @@ def _redeem_stream_ticket(ticket: str, wf_id: int) -> OrgCtx:
     now = time.time()
     with _SSE_TICKETS_LOCK:
         _purge_expired_tickets(now)
-        entry = _SSE_TICKETS.pop(ticket, None)
-    if entry is None:
-        raise HTTPException(status_code=403, detail="invalid or expired stream ticket")
-    if entry["wf_id"] != wf_id:
-        raise HTTPException(status_code=403, detail="stream ticket is bound to another workflow")
+        entry = _SSE_TICKETS.get(ticket)
+        if entry is None:
+            raise HTTPException(status_code=403, detail="invalid or expired stream ticket")
+        if entry["wf_id"] != wf_id:
+            raise HTTPException(status_code=403, detail="stream ticket is bound to another workflow")
+        # RT-V5-08: validate-then-pop under one lock hold; a rejected
+        # cross-workflow use leaves the ticket redeemable.
+        del _SSE_TICKETS[ticket]
     session = session_for("main")()
     try:
         org_row = session.get(Organization, entry["org_id"])
@@ -586,7 +589,7 @@ def stream_events(wf_id: int, request: Request, since_seq: int = 0,
                     last = e.seq
                     body = json.dumps({"seq": e.seq, "ts": e.ts.isoformat(), "type": e.type,
                                        "actor": e.actor,
-                                       "payload": json.loads(e.payload_json or "{}")})
+                                       "payload": safe_json_loads(e.payload_json)})
                     yield f"id: {e.seq}\ndata: {body}\n\n"
                 terminal = wf.state in WF_TERMINAL or wf.state == "CANCELLED"
                 if terminal and not rows:
