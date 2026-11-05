@@ -17,6 +17,8 @@ Verified 2026-11-05 (this list is the gate; all green):
 - [x] README quickstart reproduces locally without any key.
 - [x] Spend observed $0.28 on 2026-11-05 ($200 credit, ≈$199.72 left) —
   compute + inference combined via account API; on track for <$3 total.
+- [x] Pre-jury VM snapshot `complete` on 2026-11-05 (`reversa-rc4-prejury-2026-11-05`,
+  restorable via Vultr dashboard/API; $0.01).
 - [ ] LabLab submission fields + deadline re-checked on the dashboard.
 - [ ] Submission completed on LabLab (requires the human's account).
 
