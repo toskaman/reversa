@@ -19,5 +19,7 @@ on export; bounded retries with backoff+jitter; timeouts; CORS allowlist.
 - PARTIALLY_COMPENSATED (compensation failed after retries) vs
   MANUAL_REQUIRED (human needed) vs COMPENSATED are distinct terminal states.
 
-**Refused by design:** real payments (`no_real_payment` precondition), mass
-sends, third-party accounts, canceling a mid-flight compensation.
+**Refused by design (code-enforced):** real payments (`no_real_payment`
+precondition), canceling a mid-flight compensation. Mass sends and
+third-party accounts are refused by connector policy (no such capability is
+registered), but no dedicated bulk-send guard exists in code yet.

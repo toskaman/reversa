@@ -8,12 +8,12 @@ from __future__ import annotations
 
 import uuid
 
-from sqlalchemy import event
+from sqlalchemy import event, select
 
 from reversa_api.db import engine_for, session_for
 from reversa_api.engine.saga import _deps_status
-from reversa_api.evidence import append_event, verify_chain
-from reversa_api.models import ActionRun, Workflow
+from reversa_api.evidence import append_event, verify_chain, verify_chain_rows
+from reversa_api.models import ActionRun, Event, Workflow
 
 
 class _Counter:
@@ -131,3 +131,50 @@ def test_deps_status_precomputed_map_matches_rescan(fresh_db, demo_auth):
         assert c.statements == []
     finally:
         session.close()
+
+
+def test_export_single_pass_equivalent_output(client, demo_auth):
+    """F4: /evidence reads events once (was twice); single-pass output identical."""
+    from .conftest import make_ready
+    from reversa_api.cli import verify_bundle
+
+    made = make_ready(client, demo_auth)
+    wf_id = made["workflow"]["id"]
+    session = session_for("main")()
+    try:
+        rows = session.scalars(
+            select(Event).where(Event.workflow_id == wf_id)
+            .order_by(Event.seq)
+        ).all()
+        assert len(rows) > 0
+        # Equivalence: single-pass helper matches two-pass entry point.
+        assert verify_chain_rows(rows) == verify_chain(session, wf_id)
+        # Equivalence under tamper: same (False, bad_seq, message).
+        rows[0].payload_json = '{"tampered": true}'
+        session.flush()
+        tampered = session.scalars(
+            select(Event).where(Event.workflow_id == wf_id)
+            .order_by(Event.seq)
+        ).all()
+        expected = verify_chain(session, wf_id)
+        assert expected[0] is False
+        assert verify_chain_rows(tampered) == expected
+        session.rollback()
+    finally:
+        session.close()
+    with _Counter() as c:
+        r = client.get(f"/api/v1/workflows/{wf_id}/evidence",
+                       headers=demo_auth["headers"])
+    assert r.status_code == 200, r.text
+    bundle = r.json()
+    assert c.count("SELECT", "FROM events") == 1
+    assert bundle["chain"]["valid"] is True
+    ok, message = verify_bundle(bundle)
+    assert ok, message
+    with _Counter() as c:
+        r = client.get(f"/api/v1/workflows/{wf_id}/evidence",
+                       params={"format": "html"},
+                       headers=demo_auth["headers"])
+    assert r.status_code == 200, r.text
+    assert c.count("SELECT", "FROM events") == 1
+    assert "Evidence Passport" in r.text

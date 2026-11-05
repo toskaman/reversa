@@ -22,11 +22,17 @@ export class ApiError extends Error {
 }
 
 export async function api<T>(path: string, opts?: RequestInit): Promise<T> {
+  return apiAs<T>(path, getToken(), opts);
+}
+
+export async function apiAs<T>(
+  path: string, token: string, opts?: RequestInit,
+): Promise<T> {
   const res = await fetch(`${apiBase()}${path}`, {
     ...opts,
     headers: {
       "Content-Type": "application/json",
-      ...(getToken() ? { Authorization: `Bearer ${getToken()}` } : {}),
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
       ...(opts?.headers || {}),
     },
   });

@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useEffect, useState } from "react";
 import { api } from "../lib/api";
 import type { Workflow } from "../lib/types";
+import JuryLaunch from "../components/JuryLaunch";
 import StatusBadge from "../components/StatusBadge";
 
 export default function Overview() {
@@ -26,6 +27,7 @@ export default function Overview() {
       <h1>Overview</h1>
       <p className="sub">AI that doesn&apos;t just act. It makes things right.</p>
       {error && <div className="err">{error} — configure your token in Settings.</div>}
+      <JuryLaunch />
       <div className="row">
         <div className="card"><h2>Active ({active.length})</h2>
           {active.map((w) => (

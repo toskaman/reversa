@@ -3,6 +3,8 @@
 - Author: AGENT-18 (Commercial Strategist), 2026-11-05.
 - Status: DRAFT proposal. This file is the only file written by AGENT-18.
 - Jury docs (`docs/jury/*`) were NOT edited this cycle, per mandate.
+- Cycle-3 amendment (2026-11-05, AGENT-18): U7 fix in UC1 limits +
+  §8 recommendation status check. No numbers changed.
 - Honesty rule (spec §2.3, §15): no revenue, customers, or real ROI exist or
   are claimed. Every number below is either MEASURED (with source) or
   HYPOTHETICAL (explicitly labeled, buyer-editable).
@@ -134,8 +136,11 @@ All gains HYPOTHETICAL unless they cite a measured demo behavior.
   evidence chain exported (demo behavior, `docs/jury/04`).
 - **Potential gains (HYPOTHETICAL):** recovery hours → near-zero on
   reversible failures; every incident ships with an auditor-readable report.
-- **Limits:** demo connectors, not the buyer's real stack; irreversible steps
-  (real payments, mass sends) refuse by design and stay manual.
+- **Limits:** demo connectors, not the buyer's real stack; real-money steps
+  are refused by the enforced `no_real_payment` precondition
+  (`connectors/sdk.py`), and IRREVERSIBLE / MANUAL_ONLY steps stay manual
+  with reasons. Bulk sends have no code guard yet — pilot scope treats
+  them as manual/policy-excluded, never auto-undone.
 - **Measurable metrics:** recovery hours/incident; % incidents with complete
   evidence export; activation SLA attainment.
 
@@ -231,3 +236,21 @@ no headcount or funding is claimed.
 4. Keep the internal 10/10 grid (`docs/product/competition.md`) out of jury
    materials; it is self-assessment, and presenting it invites exactly the
    wrong question.
+
+Cycle-3 status check (2026-11-05, AGENT-18 — file owner; jury docs
+still NOT edited, per mandate):
+
+- Rec 1: OPEN — `docs/jury/08-business-case.md:3-6` still carries B1–B3
+  unlabeled; the one-line hypothesis label is still the fix.
+- Rec 2: OPEN — `reversa/apps/web/app/roi/page.tsx:34` cost label
+  unchanged; "(edit me — your loaded cost)" hint still missing.
+- Rec 3: HOLDING on `/roi` (qualified labels intact,
+  `page.tsx:36-37,53-55`); EXTEND to `docs/jury/08:24`, whose
+  "measured 100% demo recovery rate" still lacks the "(n=5)" qualifier.
+- Rec 4: HOLDING — no self-assessment grid in jury materials, only the
+  pointer at `docs/jury/08:11`. Keep it that way.
+- Rec 5 (NEW): narrow the U7 overstatement in
+  `docs/jury/06-security-and-recovery.md:22-23` — only `no_real_payment`
+  is code-enforced (`connectors/sdk.py:145-147`); bulk sends /
+  third-party-account effects have no guard. Commercial files fixed this
+  cycle (`pilot-offer.md` §2 table + P1 block + §7; this file UC1).

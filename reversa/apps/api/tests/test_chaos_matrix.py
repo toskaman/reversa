@@ -1,4 +1,5 @@
-"""Chaos Matrix V2 cycle 2: CM-04, CM-03, CM-05, CM-10, CM-09.
+"""Chaos Matrix V2 cycle 3: CM-04, CM-03, CM-05, CM-10, CM-09 (cycle 2)
++ CM-11, CM-13, CM-15 (cycle 3). Covered: 13/20.
 
 Spec: docs/benchmarks/chaos-matrix-v2.md (priority order). Each test asserts
 real terminal states, action states, journaled events, and demo resources --
@@ -212,3 +213,227 @@ def test_cm09_chaos_rule_lifecycle(client, demo_auth):
 
     r = client.delete("/api/v1/demo/chaos/999999", headers=h)
     assert r.status_code == 404, r.text
+
+
+def test_cm11_action_scoping_and_times_budget(client, demo_auth):
+    """CM-11: mismatch never fires/consumes; single-shot http500 -> COMPLETED.
+
+    Rule targets demo-crm/crm.create_organization (seq 2) with times=1.
+    Seq 1 (same connector, different action) must run clean without
+    consuming budget; seq 2 fires once, retries, then succeeds.
+    """
+    r = client.post("/api/v1/demo/chaos",
+                    json={"target_connector": "demo-crm",
+                          "target_action": "crm.create_organization",
+                          "fault": "http500", "times": 1},
+                    headers=demo_auth["headers"])
+    assert r.status_code == 201, r.text
+    rule_id = r.json()["id"]
+    wf_id = make_ready(client, demo_auth)["workflow"]["id"]
+
+    r = client.post(f"/api/v1/workflows/{wf_id}/execute", headers=demo_auth["headers"])
+    assert r.status_code == 200, r.text
+    assert r.json()["workflow"]["state"] == "COMPLETED", r.text
+    by_seq = {a["seq"]: a["state"] for a in r.json()["actions"]}
+    assert all(by_seq[s] == "VERIFIED" for s in range(1, 11)), by_seq
+
+    events = _events(client, demo_auth, wf_id)
+    # Mismatch proof: seq 1 (same connector) never failed nor retried.
+    trail1 = _transitions(events, "crm.validate_customer")
+    assert "FAILED" not in trail1, trail1
+    assert "RETRY_SCHEDULED" not in trail1, trail1
+    assert trail1[-1] == "VERIFIED", trail1
+    # Single-shot proof: seq 2 failed once, retried, then verified.
+    trail2 = _transitions(events, "crm.create_organization")
+    assert "FAILED" in trail2, trail2
+    assert "RETRY_SCHEDULED" in trail2, trail2
+    assert trail2[-1] == "VERIFIED", trail2
+
+    # Chaos fired exactly once, on seq 2 only.
+    injected = [e for e in events if e["type"] == "chaos.injected"]
+    assert len(injected) == 1, injected
+    assert injected[0]["payload"]["seq"] == 2, injected
+    assert injected[0]["payload"]["fault"] == "http500"
+    waits = [e for e in events if e["type"] == "action.retry_wait"]
+    assert len(waits) >= 1
+    assert all(w["payload"]["seq"] == 2 for w in waits)
+
+    # Budget consumed exactly once: mismatch did not consume, shot did.
+    r = client.get("/api/v1/demo/chaos", headers=demo_auth["headers"])
+    rows = r.json()["data"]
+    assert len(rows) == 1, rows
+    assert rows[0]["id"] == rule_id
+    assert rows[0]["times_remaining"] == 0, rows
+
+    assert len(_resources(client, demo_auth, "identity", kind="workspace")) == 1
+    assert len(_resources(client, demo_auth, "identity", kind="user",
+                          status="active")) == 4
+    assert len(_resources(client, demo_auth, "crm", kind="organization",
+                          status="active")) == 1
+
+    r = client.get(f"/api/v1/workflows/{wf_id}/evidence",
+                   headers=demo_auth["headers"])
+    assert r.json()["chain"]["valid"] is True
+
+
+def test_cm13_conditional_compensation_refused(client, demo_auth, monkeypatch):
+    """CM-13: invoice_issued mid-run blocks billing undo -> PARTIALLY_COMPENSATED.
+
+    Chaos fires forward-only (never inside compensation), so per the matrix
+    observation #2 the blocked compensation is arranged via a direct store
+    write: when seq 9 (core.consistency_check) fires, an external actor
+    issues the invoice on the already-VERIFIED billing profile. Seq 9 then
+    fails (max_attempts=1, no retry wait) and billing undo refuses x3.
+    """
+    from reversa_api.connectors.services import DemoStore
+    from reversa_api.engine import saga as saga_mod
+
+    r = client.post("/api/v1/demo/chaos",
+                    json={"target_connector": "reversa-core",
+                          "fault": "http500", "times": 5},
+                    headers=demo_auth["headers"])
+    assert r.status_code == 201, r.text
+
+    real_consume = saga_mod._consume_chaos
+
+    def mid_run_consume(session, wf, org, action, worker_id):
+        if action.action_type == "core.consistency_check":
+            store = DemoStore("billing")
+            prof = store.get_by_name(org.id, "billing_profile", "acme",
+                                     workflow_id=wf.id)
+            if prof is not None:
+                store.update_data(prof["id"], prof["version"],
+                                  {"invoice_issued": True})
+        return real_consume(session, wf, org, action, worker_id)
+
+    monkeypatch.setattr(saga_mod, "_consume_chaos", mid_run_consume)
+    wf_id = make_ready(client, demo_auth)["workflow"]["id"]
+
+    r = client.post(f"/api/v1/workflows/{wf_id}/execute", headers=demo_auth["headers"])
+    assert r.status_code == 200, r.text
+    assert r.json()["workflow"]["state"] == "PARTIALLY_COMPENSATED", r.text
+    by_seq = {a["seq"]: a for a in r.json()["actions"]}
+    assert by_seq[9]["state"] == "FAILED", by_seq
+    assert by_seq[9]["action_type"] == "core.consistency_check"
+    assert by_seq[10]["state"] == "SKIPPED", by_seq
+    assert by_seq[6]["state"] == "COMPENSATION_FAILED", by_seq
+    assert "invoice already issued" in by_seq[6]["error"], by_seq[6]["error"]
+    assert all(by_seq[s]["state"] == "COMPENSATED"
+               for s in (1, 2, 3, 4, 5, 7, 8)), by_seq
+
+    events = _events(client, demo_auth, wf_id)
+    types = _types(events)
+    assert "compensation.started" in types
+    assert "workflow.manual_required" not in types
+    trail_billing = _transitions(events, "billing.create_profile")
+    assert "COMPENSATION_FAILED" in trail_billing, trail_billing
+    wf_trail = [e["payload"].get("to") for e in events
+                if e["type"] == "workflow.state"]
+    assert wf_trail[-1] == "PARTIALLY_COMPENSATED", wf_trail
+
+    # Billing profile still active with the invoice flag (undo refused).
+    billing_active = _resources(client, demo_auth, "billing",
+                                kind="billing_profile", status="active")
+    assert len(billing_active) == 1, billing_active
+    assert billing_active[0]["data"].get("invoice_issued") is True, billing_active
+    assert _resources(client, demo_auth, "billing",
+                      kind="billing_profile", status="cancelled") == []
+    # Everything else restored.
+    assert _resources(client, demo_auth, "identity", kind="workspace") == []
+    assert len(_resources(client, demo_auth, "identity", kind="user",
+                          status="archived")) == 4
+    assert len(_resources(client, demo_auth, "crm", kind="organization",
+                          status="archived")) == 1
+
+    r = client.get(f"/api/v1/workflows/{wf_id}/evidence",
+                   headers=demo_auth["headers"])
+    assert r.json()["chain"]["valid"] is True
+
+
+def test_cm15_irreversible_step_forces_manual_path(client, demo_auth):
+    """CM-15: notify VERIFIED then billing fails -> MANUAL_REQUIRED naming notify.
+
+    Custom 2-step plan seeded via DB (the intents API only builds the
+    10-step onboarding graph): seq 1 notify.send_summary (IRREVERSIBLE),
+    seq 2 billing.create_profile failing via chaos x5.
+    """
+    import json
+    import uuid
+
+    from reversa_api.db import session_for
+    from reversa_api.models import ActionRun, Workflow
+
+    r = client.post("/api/v1/demo/chaos",
+                    json={"target_connector": "demo-billing",
+                          "fault": "http500", "times": 5},
+                    headers=demo_auth["headers"])
+    assert r.status_code == 201, r.text
+
+    session = session_for("main")()
+    try:
+        wf = Workflow(org_id=demo_auth["org_id"], name="CM-15 irreversible",
+                      intent="CM-15 custom plan", state="READY", plan_version=1,
+                      plan_json=json.dumps({"goal": "CM-15", "steps": [
+                          {"seq": 1, "action_type": "notify.send_summary",
+                           "connector_id": "demo-notify"},
+                          {"seq": 2, "action_type": "billing.create_profile",
+                           "connector_id": "demo-billing"}]}),
+                      created_by="test")
+        session.add(wf)
+        session.flush()
+        session.add(ActionRun(
+            workflow_id=wf.id, seq=1, action_type="notify.send_summary",
+            connector_id="demo-notify", state="PENDING",
+            input_json=json.dumps({"channel": "email",
+                                   "message": "CM-15 irreversible"}),
+            idempotency_key=f"k-cm15-1-{uuid.uuid4().hex}", max_attempts=3,
+            compensation_capability="IRREVERSIBLE", depends_on="[]"))
+        session.add(ActionRun(
+            workflow_id=wf.id, seq=2, action_type="billing.create_profile",
+            connector_id="demo-billing", state="PENDING",
+            input_json=json.dumps({"org_slug": "acme", "plan": "enterprise"}),
+            idempotency_key=f"k-cm15-2-{uuid.uuid4().hex}", max_attempts=2,
+            compensation_capability="CONDITIONALLY_REVERSIBLE",
+            depends_on="[1]"))
+        session.commit()
+        wf_id = wf.id
+    finally:
+        session.close()
+
+    r = client.post(f"/api/v1/workflows/{wf_id}/execute", headers=demo_auth["headers"])
+    assert r.status_code == 200, r.text
+    assert r.json()["workflow"]["state"] == "MANUAL_REQUIRED", r.text
+    by_seq = {a["seq"]: a for a in r.json()["actions"]}
+    assert by_seq[1]["state"] == "VERIFIED", by_seq
+    assert by_seq[1]["compensation_capability"] == "IRREVERSIBLE"
+    assert by_seq[2]["state"] == "FAILED", by_seq
+    assert by_seq[2]["attempt"] == 2, by_seq
+    assert "CHAOS_HTTP500" in by_seq[2]["error"], by_seq[2]["error"]
+
+    events = _events(client, demo_auth, wf_id)
+    injected = [e for e in events if e["type"] == "chaos.injected"]
+    assert len(injected) == 2, injected
+    assert all(e["payload"]["seq"] == 2 for e in injected)
+    manual_comp = [e for e in events if e["type"] == "compensation.manual_required"]
+    assert len(manual_comp) == 1, manual_comp
+    assert manual_comp[0]["payload"]["seq"] == 1
+    assert manual_comp[0]["payload"]["action_type"] == "notify.send_summary"
+    assert manual_comp[0]["payload"]["capability"] == "IRREVERSIBLE"
+    wf_manual = [e for e in events if e["type"] == "workflow.manual_required"]
+    assert len(wf_manual) == 1, wf_manual
+    items = wf_manual[0]["payload"]["items"]
+    assert len(items) == 1 and items[0]["action_type"] == "notify.send_summary", items
+    assert items[0]["seq"] == 1
+    states_seen = [e["payload"].get("to") for e in events
+                   if e["type"] == "action.state"]
+    assert "COMPENSATED" not in states_seen, states_seen
+
+    notify_active = _resources(client, demo_auth, "notify",
+                               kind="message", status="active")
+    assert len(notify_active) == 1, notify_active
+    assert notify_active[0]["data"].get("sent") is True, notify_active
+    assert _resources(client, demo_auth, "billing", kind="billing_profile") == []
+
+    r = client.get(f"/api/v1/workflows/{wf_id}/evidence",
+                   headers=demo_auth["headers"])
+    assert r.json()["chain"]["valid"] is True

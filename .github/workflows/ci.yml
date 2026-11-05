@@ -25,3 +25,48 @@ jobs:
       - run: npm ci --prefix reversa/apps/web
       - run: npm run --prefix reversa/apps/web lint
       - run: npm run --prefix reversa/apps/web build
+  docker:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build API image
+        run: docker build --tag reversa-api:ci ./reversa/apps/api
+      - name: Build web image
+        run: docker build --tag reversa-web:ci ./reversa/apps/web
+  secrets-scan:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Scan for secret patterns
+        run: |
+          # Bare rev_/ghp_ match legitimate committed prefixes, fixtures and
+          # docs, so require a 20+ char token body (real tokens are longer;
+          # longest committed legit run is 15 chars). Left boundary keeps
+          # identifiers like prev_* from matching. Private keys have no
+          # legit committed occurrence, so match the PEM header directly.
+          # ci.yml documents the literals, so exclude it (push protection
+          # still covers workflow files). Lists file names only — never
+          # prints matching lines, so a hit cannot leak a secret into logs.
+          PATTERN='(^|[^A-Za-z0-9_])rev_[A-Za-z0-9_-]{20,}|ghp_[A-Za-z0-9]{20,}|BEGIN (RSA |DSA |EC |OPENSSH )?PRIVATE KEY'
+          SCAN_OUT=$(grep -rEl \
+            --exclude-dir=.git \
+            --exclude-dir=node_modules \
+            --exclude-dir=.venv \
+            --exclude-dir=.next \
+            --exclude-dir=__pycache__ \
+            --exclude-dir=.pytest_cache \
+            --exclude='*.pyc' \
+            --exclude=ci.yml \
+            -e "$PATTERN" . 2>&1)
+          STATUS=$?
+          if [ "$STATUS" -eq 0 ]; then
+            echo "Secret pattern matches in:"
+            echo "$SCAN_OUT"
+            echo "::error::Secret pattern detected (rev_ / ghp_ / private key). Remove the secret before merging."
+            exit 1
+          elif [ "$STATUS" -ne 1 ]; then
+            echo "$SCAN_OUT"
+            echo "::error::Secret scan failed to run (grep exit $STATUS)."
+            exit 1
+          fi
+          echo "No secret patterns found."

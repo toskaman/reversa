@@ -262,6 +262,20 @@ def test_verify_404_is_genuine_absence(ctx):
                             {"issue_number": 7, "title": "hello"}) is False
 
 
+def test_verify_403_mentioning_404_still_raises(ctx):
+    """V3-1: absence needs a structured 404, not a ' 404 ' substring."""
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(403, json={"message": "see error 404 for details"})
+
+    connector = GithubConnector(transport=httpx.MockTransport(handler),
+                                allowed_repos=("o/r",))
+    action = connector.contract_for("github.create_issue")
+    with pytest.raises(ConnectorError) as excinfo:
+        connector.verify(ctx, action, {"repo": "o/r"}, {"issue_number": 7})
+    assert excinfo.value.code == "GITHUB_API_ERROR"
+
+
 def test_verify_unknown_action_raises(ctx, offline):
     """R1: verify must refuse actions it cannot interpret."""
     import dataclasses

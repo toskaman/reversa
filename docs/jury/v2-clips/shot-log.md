@@ -42,3 +42,44 @@ reversa/apps/api/.venv/Scripts/python.exe "$env:TEMP\v2_capture.py"
 
 Re-run prints `happy wf=1 events=59 …` / `chaos wf=2 events=81 …` and
 rewrites the JSON/HTML/TXT clips above (workflow ids restart at 1 per run).
+
+## Cycle 3 capture + assembly (AGENT-19, 2026-11-05, LOCAL stack only)
+
+Outputs (NEW, uncommitted): `docs/jury/demo-v2.mp4` (85.1 s, 1280×800,
+h264 + AAC VO), `docs/jury/demo-v2.srt` (7 entries, real timestamps),
+`v2-clips/s1-hook.mp4 … s6-evidence.mp4` (per-scene segments with VO).
+`demo.mp4` / `demo.srt` (v1) left untouched. No prod contact. No secrets
+in any clip: capture token passed via localStorage init script only,
+never typed or shown; stills reviewed — only the `token:media19` actor
+label (not the credential) appears. Capture token minted for this run
+and revoked afterwards; leftover chaos rules deleted.
+
+Source runs (real local stack, wf ids 4/6/7 — shared demo DB, no reset):
+wf6 COMPLETED 10/10 VERIFIED, 59 events; wf7 COMPENSATED (seq 6
+`billing.create_profile` FAILED, 7 compensated, seqs 9+10 SKIPPED),
+81 events; CLI `verify` on the wf6 export: `VALID: offline chain valid
+(59 events recomputed)`, rc=0 (verbatim on the S6 card).
+
+| Scene | Video source (real captures) | VO (SAPI Zira, disclosed TTS) |
+|---|---|---|
+| S1 Hook 10.4 s | s4-chaos.webm 0–6 s (Demo Lab click + run start) + freeze-hold | 9.8 s |
+| S2 Plan 15.4 s | s2-plan.webm (plan → approve) + freeze-hold | 14.8 s |
+| S3 Execution 12.0 s | s3a-execute + s3b-workflow (COMPLETED + graph/timeline scroll) | 11.4 s |
+| S4 Chaos 12.6 s | s4-chaos.webm full (INJECT + finished banner) + freeze-hold | 12.0 s |
+| S5 Recovery 16.4 s | s5-recovery + s5b-comp (Recovery Center + wf7 comp list) + hold | 15.8 s |
+| S6 Evidence 14.2 s | s6-evidence (VALID + timeline) + verbatim CLI card 6 s | 13.6 s |
+| Tail 4 s | tagline card, silent | — |
+
+On-screen numbers: 10 actions / 10 verified / 7 compensated / 59 events /
+VALID rc=0 from the runs above; P50 505 ms / 1.78 s / 100% are the
+published jury figures (unchanged, from `docs/benchmarks/results.md`).
+Capture notes: `:3000` web was serving a stale build (statics 400, JS
+dead — owner process left untouched); captures used own `next start`
+on `:3100` from the on-disk build (read-only, stopped after) with
+capture-browser `--disable-web-security` (demo API CORS allowlists
+`:3000` only; prod is same-origin via Caddy). A stale enabled
+billing-500 rule (times_remaining=1, no active owner) was deleted after
+it demonstrably poisoned a happy-path take (wf5 COMPENSATED); the
+scenario's own rule was deleted after the run. Raw `.webm` + `.wav`
+kept ephemeral in `%TEMP%` (`v2-raw/`, `v2-vo/`); reproduce via the
+scripts there (`v2capture*.py`, `v2voice.ps1`, `build_v2.py`).

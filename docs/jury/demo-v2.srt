@@ -1,0 +1,27 @@
+1
+00:00:00,000 --> 00:00:10,400
+Your AI agent just onboarded half a customer. Six steps done, then billing died. Who undoes the other five?
+
+2
+00:00:10,400 --> 00:00:25,839
+REVERSA turns plain words into a strict plan, only over systems you authorized. Every effect previewed. Every risk flagged. Billing touches money, so it needs your approval.
+
+3
+00:00:25,839 --> 00:00:37,879
+Ten real actions across five systems. And REVERSA never assumes, it re-checks every effect. Green means verified, not attempted.
+
+4
+00:00:37,879 --> 00:00:50,479
+Now watch it break. One click kills billing mid-run. REVERSA detects it instantly, blocks everything downstream, nothing half-built escapes.
+
+5
+00:00:50,479 --> 00:01:06,900
+Then it heals itself. Seven completed steps, undone in reverse order, each one verified gone. The workspace is deleted. The users are archived. Nothing left to clean up.
+
+6
+00:01:06,900 --> 00:01:21,120
+Every run seals a hash-chained Evidence Passport, fifty-nine events you can verify offline. All of it on one Vultr VM. REVERSA: reversible where possible, accountable everywhere.
+
+7
+00:01:21,120 --> 00:01:25,120
+REVERSA: reversible where possible, accountable everywhere.

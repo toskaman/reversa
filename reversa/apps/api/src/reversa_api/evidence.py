@@ -112,6 +112,15 @@ def verify_chain(session, workflow_id: int) -> tuple[bool, int, str]:
     rows = session.scalars(
         select(Event).where(Event.workflow_id == workflow_id).order_by(Event.seq)
     ).all()
+    return verify_chain_rows(rows)
+
+
+def verify_chain_rows(rows: list[Event]) -> tuple[bool, int, str]:
+    """Verify pre-fetched seq-ordered events (single-pass export path).
+
+    Same verdicts as verify_chain for the same rows; callers that already
+    hold the ordered events use this to avoid a second identical SELECT.
+    """
     prev = GENESIS
     expected_seq = 1
     for row in rows:

@@ -3,6 +3,10 @@
 - Author: AGENT-18 (Commercial Strategist), 2026-11-05.
 - Status: DRAFT proposal. This file is the only file written by AGENT-18
   this cycle. Jury docs (`docs/jury/*`) were NOT edited, per mandate.
+- Cycle-3 amendment (2026-11-05, AGENT-18): U7/N1 fix — the
+  refused-by-design wording now claims only the code-enforced guard
+  (`no_real_payment`); bulk sends / third-party accounts corrected to
+  manual/policy-excluded. No numbers changed; ledger §8 still exhaustive.
 - Honesty rule (spec §2.3, §15): zero customers, zero revenue, zero
   completed pilots exist or are claimed. Every number below is either
   MEASURED (with source + n) or HYPOTHETICAL (explicitly labeled).
@@ -37,7 +41,7 @@
 | Week | Activity | Entry / exit artifact |
 |---|---|---|
 | 1 — Instrument | Connect ONE real system via SDK (read-first). Writes enabled only behind plan-hash-bound approvals (30-min TTL, implemented behavior per `docs/jury/06`). Baseline current recovery hours/incident + activation/reopen metrics from the buyer's own tickets. | Baseline sheet (buyer's numbers, THEIR source — replaces every HYPOTHETICAL input below). |
-| 2–3 — Prove | Replay 3–5 of the buyer's real failure shapes in sandbox (count HYPOTHETICAL scope); per-incident evidence exports delivered to the champion after each run. Failure shapes limited to reversible classes — irreversible steps (real payments, mass sends, third-party accounts) refuse by design and stay manual (`docs/jury/06`). | One evidence export per incident + running readout log. |
+| 2–3 — Prove | Replay 3–5 of the buyer's real failure shapes in sandbox (count HYPOTHETICAL scope); per-incident evidence exports delivered to the champion after each run. Failure shapes limited to reversible classes — real-money steps are refused by the enforced `no_real_payment` precondition (`connectors/sdk.py`); bulk sends / third-party-account effects have NO code guard, so they stay out of auto-undo scope (manual / policy-handled). | One evidence export per incident + running readout log. |
 | 4 — Decide | Joint readout against the pre-registered success bar (§3). Go / no-go on conversion; either way the buyer keeps §4. | Signed readout: bar met / not met per criterion. |
 
 Guardrails (all implemented product behavior, not promises):
@@ -124,9 +128,12 @@ real-time/high-throughput) per commercial-v2 §3 — do not pitch them.
   reconciliation never blindly retries, unsafe undo is refused with
   reasons (`docs/product/recovery-proof-engine.md` §0).
 - **Objection:** "Another platform to babysit." **Answer:** read-only
-  evidence + refusal-by-design; it refuses what it cannot safely undo
-  (real payments, mass sends — `docs/jury/06`) instead of failing
-  quietly at 3 a.m.
+  evidence + refusal-by-design; real-money steps are refused by an
+  enforced precondition (`no_real_payment`, `connectors/sdk.py`), and
+  anything it cannot safely undo surfaces as a manual item with a
+  reason instead of failing quietly at 3 a.m. Bulk sends and
+  third-party-account effects have no code guard yet — the pilot keeps
+  them manual and out of auto-undo scope.
 - **Pilot CTA:** "Give us one sandbox system and your five ugliest
   recent provisioning tickets. In 30 days you get the baseline, the
   replays, and the evidence exports — yours to keep even if you pass."
@@ -193,6 +200,10 @@ real-time/high-throughput) per commercial-v2 §3 — do not pitch them.
 - No exactly-once claim on external systems; the hash chain detects
   tampering but is not absolute immutability alone; exported `ts` is
   not hash-covered (`README.md`).
+- Refusal-guard status, stated plainly: only `no_real_payment` is a
+  code-enforced precondition (`connectors/sdk.py`); bulk sends and
+  third-party-account effects have no guard in code, so the pilot
+  scopes them as manual — never auto-undone, never claimed otherwise.
 - Internal self-scores (e.g. Business value 7,
   `docs/product/competition.md`) are never pitched as official ratings.
 

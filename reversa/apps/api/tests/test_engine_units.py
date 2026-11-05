@@ -648,3 +648,96 @@ def test_resume_route_rejects_terminal_and_ready(client, demo_auth):
     r = client.post(f"/api/v1/workflows/{wf_id}/resume",
                     headers=demo_auth["headers"])
     assert r.status_code == 409, r.text
+
+
+def _seed_chaos_rule(session, org_id: int, connector: str, fault: str,
+                     target_action: str = "", times: int = 1):
+    from reversa_api.models import ChaosRule
+    rule = ChaosRule(org_id=org_id, target_connector=connector,
+                     target_action=target_action, fault=fault,
+                     times_remaining=times, enabled=1)
+    session.add(rule)
+    session.flush()
+    return rule
+
+
+def test_chaos_earlier_mismatch_does_not_shadow_later_match(
+        fresh_db, demo_auth):
+    """F3: a lower-id rule for another action must not shadow a match.
+
+    Rule 1 (older): demo-crm/crm.create_organization http500.
+    Rule 2 (newer): demo-crm/crm.validate_customer malformed.
+    Firing for validate_customer must raise the malformed fault, consume
+    only rule 2, and leave rule 1's budget untouched.
+    """
+    from reversa_api.connectors.sdk import ChaosTriggered
+    from reversa_api.engine import saga as saga_mod
+    from reversa_api.models import Event
+    session = session_for("main")()
+    try:
+        wf = Workflow(org_id=demo_auth["org_id"], name="t", intent="t",
+                      state="RUNNING", plan_json="{}", created_by="test")
+        session.add(wf)
+        session.flush()
+        org = session.get(Organization, demo_auth["org_id"])
+        action = _seed_action(
+            session, wf.id, seq=1, state="PENDING", key="k-f3-shadow",
+            action_type="crm.validate_customer", connector_id="demo-crm",
+            inputs={"customer_name": "x"})
+        decoy = _seed_chaos_rule(session, demo_auth["org_id"], "demo-crm",
+                                 "http500",
+                                 target_action="crm.create_organization")
+        match = _seed_chaos_rule(session, demo_auth["org_id"], "demo-crm",
+                                 "malformed",
+                                 target_action="crm.validate_customer")
+        session.commit()
+        assert decoy.id < match.id
+        with pytest.raises(ChaosTriggered) as exc_info:
+            saga_mod._consume_chaos(
+                session, wf, org, session.get(ActionRun, action.id), "w")
+        assert exc_info.value.code == "CHAOS_MALFORMED", exc_info.value.code
+        assert decoy.times_remaining == 1, "mismatch must consume no budget"
+        assert match.times_remaining == 0
+        injected = session.query(Event).filter_by(
+            workflow_id=wf.id, type="chaos.injected").all()
+        assert len(injected) == 1
+        assert json.loads(injected[0].payload_json)["fault"] == "malformed"
+    finally:
+        session.close()
+
+
+def test_chaos_matching_precedence_is_lowest_id(fresh_db, demo_auth):
+    """F3: when several rules match, the lowest-id (oldest) fires.
+
+    Rule 1 (older): demo-crm wildcard "" http500.
+    Rule 2 (newer): demo-crm/crm.validate_customer malformed.
+    Both match validate_customer, so rule 1 fires and only rule 1 pays.
+    """
+    from reversa_api.connectors.sdk import ChaosTriggered
+    from reversa_api.engine import saga as saga_mod
+    session = session_for("main")()
+    try:
+        wf = Workflow(org_id=demo_auth["org_id"], name="t", intent="t",
+                      state="RUNNING", plan_json="{}", created_by="test")
+        session.add(wf)
+        session.flush()
+        org = session.get(Organization, demo_auth["org_id"])
+        action = _seed_action(
+            session, wf.id, seq=1, state="PENDING", key="k-f3-precedence",
+            action_type="crm.validate_customer", connector_id="demo-crm",
+            inputs={"customer_name": "x"})
+        first = _seed_chaos_rule(session, demo_auth["org_id"], "demo-crm",
+                                 "http500")
+        second = _seed_chaos_rule(session, demo_auth["org_id"], "demo-crm",
+                                  "malformed",
+                                  target_action="crm.validate_customer")
+        session.commit()
+        assert first.id < second.id
+        with pytest.raises(ChaosTriggered) as exc_info:
+            saga_mod._consume_chaos(
+                session, wf, org, session.get(ActionRun, action.id), "w")
+        assert exc_info.value.code == "CHAOS_HTTP500", exc_info.value.code
+        assert first.times_remaining == 0
+        assert second.times_remaining == 1
+    finally:
+        session.close()

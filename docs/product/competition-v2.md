@@ -123,7 +123,8 @@ grounded in repo (`README.md`, `docs/product/recovery-proof-engine.md`).
 3. **Containment gap is real.** Every inspected rival sandboxes *code*;
    REVERSA isolates *tenants/demo systems*. Do not claim code sandboxing.
    Frame honestly: "they contain code, we contain business blast radius" —
-   and the refused-by-design list (real payments, mass sends) is the
+   and the refused-by-design list (real payments code-enforced; mass sends
+   refused by missing capability, no dedicated bulk guard yet) is the
    business equivalent of their seccomp/no-network flags.
 4. **Deployment honesty wins points.** Tripwire self-declares mock mode;
    two rivals show Vercel badges. REVERSA's 100%-on-Vultr live demo with
@@ -283,5 +284,123 @@ limits: npm only, one run at a time, Docker not microVMs.
 4. **Coverage is still partial**: only 12 of 44 submissions (+21
    drafts) observable from public pages. Re-check Nov 7–8; open
    CiteScreen and Theseus first, then any newly top-voted titles.
+
+No copied code. No rival test/deployment results asserted. No secrets.
+
+---
+
+# Cycle 3 re-check (AGENT-17, REVERSA V2 cycle 3, 2026-11-05 later same day)
+
+Sources: public LabLab pages only, no login. 8 pages read in full this
+cycle: live board + event page + 6 submission pages (CiteScreen and
+Theseus inspected for the first time; YAI Guard, Detonation Chamber,
+Fathom, and Upgrade Proof re-read to verify cycle 1/2 notes). All
+competitor claims are **as described on their public pages, unverified
+by us**. Explore-more links harvested from 5 submission pages all
+resolve to the same 4 non-top-10 submissions — no further public
+submission URLs are observable.
+
+## Board counters (2026-11-05, cycle 3)
+
+2,530 participants (+96 today; +1 since cycle 2), 708 teams (+46 today;
++1), 45 submissions (+25 today; +1), 21 drafts (+10 today; unchanged).
+Top-10 titles, order, and vote counts are unchanged (Detonation 2, SAAS
+Fashion 2, QuantGate 1, YAI Guard 1, rest 0). The +1 submission (44→45)
+is not linked from any public page observed, so it stays unobservable.
+
+## Cycle 2 gaps closed — now inspected (2026-11-05, 0 votes each)
+
+### 13. CiteScreen — Evidence-Based Resume Screening (team Resync, 2026-11-05, 0 votes)
+JD + up to 8 resumes (PDF/DOCX/TXT) → weighted rubric (must-haves ×3,
+responsibilities ×2, nice-to-haves ×1); every requirement may only
+cite lines appearing word for word in the resume, failed citations
+discarded, "No evidence" scores 0 — never guesses from title, dates,
+or school. Scoring is deterministic code; in live mode the Vultr
+Serverless Inference model may only *propose* requirement text and
+quotes, never assign the number. Every recommendation (advance / hold
+/ decline) stays a draft until a recruiter confirms or overrides with
+a note; all actions land in an audit log exportable as CSV/JSON.
+Second-pass fairness check: same rubric re-run on a redacted copy
+(names, pronouns, photos, schools, ages, contacts removed); a shift
+of 8+ points or a requirement losing all citations flags the
+candidate. Demo: blind re-scoring moves several scores once identity
+cues are stripped (Diego Alvarez 22→16 quoted) while pure
+work-evidence citations barely move. Docker on a Vultr Cloud Compute
+VM (Singapore); live mode calls Vultr Serverless Inference via its
+OpenAI-compatible API. Samples synthetic.
+- Recovery/orchestration observed: **none** — single-pass scoring
+  pipeline, no retry, compensation, undo, or cross-system healing.
+  Closest REVERSA parallels are the human approval gate
+  (draft-until-confirmed) and the exportable audit log — but no hash
+  chain is claimed and no recovery semantics exist.
+
+### 14. Theseus: keep only what's load-bearing (team Theseus, 2026-11-05, 0 votes)
+Dead-code prover: copies the project and never writes the original;
+cuts one part at a time from the copy and runs the test suite in a
+bwrap sandbox (no network, no host home, no keys, read-only system,
+time/memory caps). Tests break → part restored, marked load-bearing;
+tests pass → not needed; "proven bloat" only when tests cover it. A
+blast-radius map shows every part; Approve writes a new trimmed copy
+and re-runs the tests — nothing deleted without yes. Opt-in Vultr
+Serverless Inference agent plans cut order, explains the biggest
+breaks, writes the brief; tests back each call. Real runs on a Vultr
+VM (6 vCPU, 12 workers), v0.2.3: expressjs/compression 36 parts in
+52.9 s (24 load-bearing, 1 proven bloat — Buffer import, index.js
+line 18 — 11 human-flagged); expressjs/express 402 parts (354
+load-bearing, 48 not needed, 0 proven bloat), all 402 verdicts
+matched on a second machine. Agent cost ~$0.003–0.006/scan. Live
+containment demo: hostile probes (network, home, SSH/Vultr keys,
+/usr, 600 procs, 2 GB) all fail.
+- Recovery/orchestration observed: cut-and-restore loop is retry-like
+  at code level (part goes back on test break) — nearest to Upgrade
+  Proof's fix-and-retest pattern. **No compensation/undo semantics
+  for business effects, no refusal-to-claim-recovery, no
+  multi-system saga, no tri-state recovery verdict.** Approval is a
+  human yes on trim, not plan-hash-bound.
+
+## Re-verified this cycle (descriptions unchanged vs cycles 1–2)
+
+YAI Guard (2026-11-05, 1 vote), Detonation Chamber (2026-11-04,
+2 votes), Fathom (2026-11-05, 0 votes), and Upgrade Proof
+(2026-11-05, 0 votes) were re-read in full; the cycle 1/2 summaries
+above remain accurate. No edits made to those sections.
+
+## Cycle 3 matrix delta (append-only; earlier tables unchanged)
+
+| Capability | REVERSA | CiteScreen | Theseus |
+|---|---|---|---|---|
+| Sandboxed execution | Demo-tenant isolation (no code sandbox) | — (scoring pipeline) | YES (bwrap, no net/keys) |
+| Verify every effect | YES (connector verify) | YES (verbatim citations + blind re-score) | YES (tests per cut, 2-machine match) |
+| Typed compensation / undo | YES (6 levels, verified) | — | — (cut-restore is code retry) |
+| Refuse unsafe undo | YES (refused-by-design) | — | — |
+| Tri-state recovery verdict | YES (PRESENT/ABSENT/UNKNOWN) | — | — (load-bearing verdicts ≠ recovery) |
+| Human approval gate | YES (plan-hash-bound, 30-min TTL) | YES (draft-until-confirmed + override note) | YES (approve-before-trim) |
+| Hash-chained evidence | YES (SHA-256 + offline CLI) | Audit log CSV/JSON (hash unclaimed) | Blast-radius map (hash unclaimed) |
+| Live Vultr deployment (claimed) | YES (1 VM, measured) | Claimed (VM Singapore) | Claimed (VM run numbers) |
+
+## Cycle 3 conclusions (2026-11-05)
+
+1. **Still nobody observed does typed, verified compensation across
+   multi-system business effects.** 14/14 publicly observable
+   submissions now inspected (10 top-voted + 4 explore-more). The
+   nearest patterns remain retry loops (Theseus cut-and-restore joins
+   Fathom query-rewrite and Upgrade Proof ≤3 fix-retries) and
+   pre-exec gates. None describes undo semantics, verify-after-undo,
+   or refusal-to-claim-recovery. Differentiation statements from
+   cycles 1–2 hold verbatim.
+2. **Evidence pressure steady**: hashed-evidence rivals stay at 4+;
+   CiteScreen adds exportable audit logs (unhashed). Keep the live
+   offline-CLI verify + RPE tri-state story as the counter.
+3. **Human-gate count rises, bar stays low**: CiteScreen
+   (draft-until-confirmed) and Theseus (approve-before-trim) join
+   YAI/CFO/Fathom — but none is plan-hash-bound with TTL. REVERSA's
+   gate story stays differentiated.
+4. **Observable universe exhausted**: all 14 publicly linked
+   submissions inspected; remaining 31 submissions + 21 drafts are
+   not reachable from public pages. The 45th submission (new since
+   cycle 2) has no public link yet.
+5. **Re-check Nov 7–8** per the cycle 1 plan; priority is any newly
+   top-voted titles plus the unobserved 45th submission if it gets
+   linked.
 
 No copied code. No rival test/deployment results asserted. No secrets.

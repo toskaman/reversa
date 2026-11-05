@@ -11,7 +11,7 @@ from sqlalchemy import select
 
 from .. import __version__
 from ..auth import OrgCtx, get_current_org, get_session
-from ..evidence import redact, verify_chain
+from ..evidence import redact, verify_chain_rows
 from ..models import ActionRun, Approval, Event, Workflow, utcnow
 
 router = APIRouter(prefix="/api/v1", tags=["evidence"])
@@ -27,7 +27,8 @@ def _bundle(session, wf: Workflow, org_slug: str) -> dict:
     approvals = session.scalars(
         select(Approval).where(Approval.workflow_id == wf.id)
     ).all()
-    ok, bad_seq, message = verify_chain(session, wf.id)
+    # F4: verify the already-fetched events (single pass, was 2 SELECTs).
+    ok, bad_seq, message = verify_chain_rows(events)
     return {
         "generator": f"reversa/{__version__}",
         "exported_at": utcnow().isoformat(),

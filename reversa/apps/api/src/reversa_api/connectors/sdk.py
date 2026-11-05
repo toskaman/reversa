@@ -35,11 +35,14 @@ class ConnectorError(Exception):
     """Typed connector failure."""
 
     def __init__(self, code: str, message: str, retryable: bool = False,
-                 uncertain: bool = False):
+                 uncertain: bool = False, status_code: int | None = None):
         super().__init__(message)
         self.code = code
         self.retryable = retryable
         self.uncertain = uncertain
+        # V3-1: structured HTTP status when the error wraps an HTTP
+        # response; callers must use this, never substring-sniff the message.
+        self.status_code = status_code
 
 
 class PreconditionFailed(ConnectorError):

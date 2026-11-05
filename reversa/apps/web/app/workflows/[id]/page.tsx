@@ -7,6 +7,7 @@ import type { Action, Preview, Workflow } from "../../../lib/types";
 import StatusBadge from "../../../components/StatusBadge";
 import WorkflowGraph from "../../../components/WorkflowGraph";
 import EventTimeline from "../../../components/EventTimeline";
+import DecisionInspector from "../../../components/Recovery/DecisionInspector";
 
 export default function WorkflowDetail({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
@@ -100,6 +101,11 @@ export default function WorkflowDetail({ params }: { params: Promise<{ id: strin
               <td className="muted">{a.error.slice(0, 120)}</td></tr>
           ))}</tbody></table>
         </div>
+      </div>
+      <div className="card"><h2>AI Decision Inspector</h2>
+        <p className="muted">Planner provenance from the workflow.created
+          payload, approvals, and shadow preview — all quoted from the API.</p>
+        <DecisionInspector workflowId={wf.id} />
       </div>
       {preview && (
         <div className="card"><h2>Shadow preview</h2>

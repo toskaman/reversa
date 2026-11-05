@@ -22,5 +22,6 @@ test suite (`pytest reversa/apps/api/tests`, `smoke_browser.py`).
    hash-link back to GENESIS with no gaps or mismatches). It does not rule
    out trailing truncation (events after N removed pre-export still verify
    VALID), and exported `ts` timestamps are not hash-covered. Strict mode
-   (`verify --strict --expect-count N --expect-head <hash>`) fails closed
-   without caller-supplied anchors and checks them when given.
+   (`verify --strict` with `--expect-count N` and/or `--expect-head <hash>`)
+   fails closed without caller-supplied anchors (either anchor alone
+   suffices) and checks them when given.

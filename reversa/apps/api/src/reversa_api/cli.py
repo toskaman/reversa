@@ -4,8 +4,9 @@ VALID means prefix-consistency: the exported events 1..N link back to GENESIS
 with no gaps or hash mismatches. It does NOT prove completeness: trailing
 truncation (events after N removed before export) still verifies VALID, and
 exported `ts` timestamps are NOT covered by the hash chain. Strict mode
-(`verify --strict --expect-count N --expect-head <hash>`) rules out trailing
-truncation against caller-supplied anchors and states the ts limit explicitly.
+(`verify --strict` with `--expect-count N` and/or `--expect-head <hash>`)
+rules out trailing truncation against caller-supplied anchors (either
+anchor alone suffices) and states the ts limit explicitly.
 """
 
 from __future__ import annotations
@@ -44,10 +45,14 @@ Strict completeness mode (--strict):
   --expect-head HASH   require the last event hash to equal HASH (detects
                        trailing truncation against a known chain head).
 
+  Either anchor alone suffices. Anchors must be caller-supplied
+  (independent of the bundle: self-attestation cannot rule out
+  truncation).
+
 Exit codes: 0 = VALID (and server-side verdict true), 1 = INVALID, 2 = usage error.
 
 Example:
-  python -m reversa_api.cli verify --strict --expect-count 59 --expect-head 9f2c… export.json"""
+  python -m reversa_api.cli verify --strict --expect-count 59 --expect-head 9f2c... export.json"""
 
 TS_LIMIT = ("event `ts` timestamps are exported but NOT covered by the hash chain; "
             "ts edits are undetectable offline")
@@ -62,23 +67,38 @@ def verify_bundle(bundle: dict, *, strict: bool = False,
     Strict mode additionally anchors completeness against caller-supplied
     expectations and always states the unhashed-ts limit explicitly.
     """
+    # V3-3: malformed bundles fail as INVALID, never traceback.
+    if not isinstance(bundle, dict):
+        return False, "malformed bundle: top-level JSON must be an object"
     events = bundle.get("events", [])
+    if not isinstance(events, list):
+        return False, "malformed bundle: 'events' must be a list"
+    workflow = bundle.get("workflow", {})
+    if not isinstance(workflow, dict) or "id" not in workflow:
+        if events:
+            return False, "malformed bundle: 'workflow.id' is missing"
+        workflow = {"id": None}
     prev = GENESIS
     expected = 1
     for e in events:
-        if e.get("seq") != expected:
-            return False, f"sequence gap: expected {expected}, got {e.get('seq')}"
-        if e.get("prev_hash") != prev:
-            return False, f"prev_hash mismatch at seq {expected}"
-        body = {"workflow_id": bundle["workflow"]["id"], "org_id": e["org_id"],
-                "seq": e["seq"], "type": e["type"], "actor": e["actor"],
-                "payload": e["payload"], "prev_hash": e["prev_hash"]}
-        digest = hashlib.sha256(
-            (e["prev_hash"] + canonical_bytes(body).decode("utf-8")).encode("utf-8")
-        ).hexdigest()
-        if digest != e["hash"]:
-            return False, f"hash mismatch at seq {expected}"
-        prev = e["hash"]
+        if not isinstance(e, dict):
+            return False, f"malformed bundle: event #{expected} is not an object"
+        try:
+            if e.get("seq") != expected:
+                return False, f"sequence gap: expected {expected}, got {e.get('seq')}"
+            if e.get("prev_hash") != prev:
+                return False, f"prev_hash mismatch at seq {expected}"
+            body = {"workflow_id": workflow["id"], "org_id": e["org_id"],
+                    "seq": e["seq"], "type": e["type"], "actor": e["actor"],
+                    "payload": e["payload"], "prev_hash": e["prev_hash"]}
+            digest = hashlib.sha256(
+                (e["prev_hash"] + canonical_bytes(body).decode("utf-8")).encode("utf-8")
+            ).hexdigest()
+            if digest != e["hash"]:
+                return False, f"hash mismatch at seq {expected}"
+            prev = e["hash"]
+        except (KeyError, TypeError, AttributeError) as exc:
+            return False, f"malformed bundle: event #{expected}: {exc}"
         expected += 1
     if not strict:
         return True, f"offline chain valid ({len(events)} events recomputed)"
@@ -108,8 +128,8 @@ def _strict_verdict(events: list, expect_count: int | None,
         head = events[-1]["hash"] if events else GENESIS
         if head != expect_head:
             return False, (
-                f"strict: head hash {head[:12]}… != expected "
-                f"{expect_head[:12]}… (possible trailing truncation; {TS_LIMIT})"
+                f"strict: head hash {head[:12]}... != expected "
+                f"{expect_head[:12]}... (possible trailing truncation; {TS_LIMIT})"
             )
     return True, (
         f"strict chain complete ({len(events)} events recomputed, anchors match; "
@@ -165,12 +185,17 @@ def main(argv: list[str]) -> int:
     if (expect_count is not None or expect_head is not None) and not strict:
         print("error: --expect-count/--expect-head require --strict")
         return 2
-    with open(positional[0], encoding="utf-8") as fh:
-        bundle = json.load(fh)
+    try:
+        with open(positional[0], encoding="utf-8") as fh:
+            bundle = json.load(fh)
+    except (OSError, ValueError, UnicodeDecodeError) as exc:
+        print(f"INVALID: cannot read export file: {exc}")
+        return 1
     ok, message = verify_bundle(bundle, strict=strict,
                                 expect_count=expect_count, expect_head=expect_head)
     print(("VALID: " if ok else "INVALID: ") + message)
-    if not bundle.get("chain", {}).get("valid", False):
+    chain = bundle.get("chain", {}) if isinstance(bundle, dict) else {}
+    if not (isinstance(chain, dict) and chain.get("valid", False)):
         print("INVALID: server-side chain verdict is false")
         return 1
     return 0 if ok else 1

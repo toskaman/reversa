@@ -1,8 +1,9 @@
 """Recovery Proof Engine v1: read-only Recovery Manifest evaluator.
 
-Implements docs/product/recovery-proof-engine.md (sections 0-4.2; the repo
-copy of the spec file is truncated mid-4.3, so sections 5+ refusal codes are
-unavailable and v1 documents its two refusal codes inline below).
+Implements docs/product/recovery-proof-engine.md (sections 0-6 incl. section 5
+refusal codes, restored in cycle V2-03; v1 ships R4_NOT_TERMINAL /
+R5_CANCELLED_RUN plus in-manifest R_CAPABILITY_REFUSAL /
+R_EXTERNAL_MODIFICATION).
 
 Read-only by construction: this module only SELECTs (workflows, actions,
 events, demo-store rows). It never appends events, never retries, never

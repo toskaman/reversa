@@ -13,7 +13,7 @@ import random
 import time
 from enum import Enum
 
-from sqlalchemy import select, update
+from sqlalchemy import or_, select, update
 
 from ..config import settings
 from ..connectors.sdk import (
@@ -175,7 +175,14 @@ def reclaim_expired_leases(session, wf: Workflow, worker_id: str) -> int:
 
 def _consume_chaos(session, wf: Workflow, org: Organization, action: ActionRun,
                    worker_id: str) -> None:
-    """Fire at most one matching chaos rule. Demo tenant only. Raises on fault."""
+    """Fire at most one matching chaos rule. Demo tenant only. Raises on fault.
+
+    Deterministic precedence (F3): among live rules for this org+connector,
+    only action-matching rules compete (exact target_action or wildcard ""),
+    and the lowest-id match fires. Filtering before the pick (not after)
+    keeps an earlier non-matching rule from shadowing a later match, while
+    a mismatch still consumes no budget.
+    """
     if not settings.chaos_enabled or not org.is_demo:
         return
     rule = session.scalars(
@@ -185,12 +192,15 @@ def _consume_chaos(session, wf: Workflow, org: Organization, action: ActionRun,
             ChaosRule.enabled == 1,
             ChaosRule.times_remaining > 0,
             ChaosRule.target_connector == action.connector_id,
+            or_(
+                ChaosRule.target_action == "",
+                ChaosRule.target_action.is_(None),
+                ChaosRule.target_action == action.action_type,
+            ),
         )
         .order_by(ChaosRule.id)
     ).first()
     if rule is None:
-        return
-    if rule.target_action and rule.target_action != action.action_type:
         return
     rule.times_remaining -= 1
     append_event(

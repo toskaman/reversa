@@ -196,3 +196,43 @@ def test_main_server_verdict_false_still_fails(tmp_path, capsys):
     path = _write(tmp_path, bundle)
     assert main(["cli", "verify", path]) == 1
     assert "server-side chain verdict is false" in capsys.readouterr().out
+
+
+def test_malformed_bundle_is_invalid_not_crash():
+    """V3-3: wrong shapes / missing keys fail as INVALID, never traceback."""
+    cases = [
+        {"events": "not-a-list"},
+        {"events": [None]},
+        {"events": [{"seq": 1, "prev_hash": GENESIS}]},
+        {"events": [{"seq": 1, "prev_hash": GENESIS, "org_id": 3}]},
+        {"workflow": {"id": 1}, "events": None},
+        ["not", "a", "dict"],
+        "a-string",
+        None,
+    ]
+    for bundle in cases:
+        ok, message = verify_bundle(bundle)
+        assert ok is False, bundle
+        assert "malformed" in message, message
+
+
+def test_empty_bundle_stays_documented_valid():
+    """0-event exports verify VALID (known blind spot; strict anchors rule out)."""
+    ok, message = verify_bundle({})
+    assert ok is True
+    assert message == "offline chain valid (0 events recomputed)"
+
+
+def test_main_malformed_file_and_garbage_is_invalid(tmp_path, capsys):
+    bad = _bundle(1)
+    del bad["events"][0]["org_id"]
+    path = _write(tmp_path, bad)
+    assert main(["cli", "verify", path]) == 1
+    assert "INVALID" in capsys.readouterr().out
+    garbage = tmp_path / "garbage.json"
+    garbage.write_text("{not json", encoding="utf-8")
+    assert main(["cli", "verify", str(garbage)]) == 1
+    assert "INVALID" in capsys.readouterr().out
+    missing = tmp_path / "nope.json"
+    assert main(["cli", "verify", str(missing)]) == 1
+    assert "INVALID" in capsys.readouterr().out

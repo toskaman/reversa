@@ -9,6 +9,10 @@
 - Non-goals: no new states, no API changes, no UI changes in this cycle.
   Implementers map this spec onto the existing engine; any mapping gap is a
   spec bug, not an engine bug, until reviewed.
+- Status (cycle 3, AGENT-04): sections 4.4–6 restored (the V2-02 file copy was
+  truncated mid-4.3); refusal codes and capability codes aligned with shipped
+  `routes/recovery.py`; §3.4 example code corrected to shipped
+  `R_EXTERNAL_MODIFICATION`.
 
 ## 0. Grounding (read, not assumed)
 
@@ -324,7 +328,7 @@ did not create manual items (e.g. whole-manifest refusal):
 
 ```json
 {
-  "code": "R2_EXTERNAL_MODIFICATION",
+  "code": "R_EXTERNAL_MODIFICATION",
   "seq": 4,
   "reason": "crm org version advanced by external actor (v3→v5); auto-undo refused",
   "event_ref": "event seq 64"
@@ -394,4 +398,298 @@ manifest's own fields plus `verify_chain`:
   `compensation.started`) → `VERIFIED`.
 - Billing-500 chaos run from `test_chaos.py` (7 compensated with verified
   absence, 1 `FAILED` trigger, 2 `SKIPPED`, chain valid) → 
-...[truncated 6268 chars]
+  `VERIFIED_WITH_COMPENSATION` (C5: 7 `COMPENSATED` in reverse order
+  `[8,7,5,4,3,2,1]`, 1 certain-failure `FAILED`, 2 `SKIPPED`; pinned by
+  `test_compensated_run_is_verified_with_compensation`: 10/10 `RESTORED`,
+  `compensations_run == 7`).
+- Tampered evidence chain (one payload rewritten) → `INDETERMINATE` via C0,
+  whatever the states say (`test_tampered_chain_is_indeterminate`).
+- External delete after a clean run (workspace row gone, seq 3 effect
+  `ABSENT` where `PRESENT` was required) → `INDETERMINATE` via C7, with a
+  `divergences[]` entry (`test_external_delete_after_success_is_divergence`).
+- Manual capability left `VERIFIED` in a compensated run (`IRREVERSIBLE`
+  notify send, effect still `PRESENT`) → `MANUAL_REQUIRED` via C3, with a
+  `capability_refusal` manual item and `R_CAPABILITY_REFUSAL`
+  (`test_unit_manual_refusal_needs_human`).
+- External modification during compensation (`PRECONDITION_FAILED`, effect
+  still `PRESENT`) → `MANUAL_REQUIRED` via C3, with an
+  `external_modification` manual item and `R_EXTERNAL_MODIFICATION`
+  (`test_unit_external_modification_orders_manual_work`).
+- Exhausted auto-recovery (`COMPENSATION_FAILED` after 3 attempts, effect
+  `PRESENT`, no manual items) → `PARTIAL` via C4
+  (`test_unit_exhausted_compensation_is_partial`).
+- Missing verify/compensation record (`COMPENSATED` with no `COMPENSATED`
+  transition in evidence) → `INDETERMINATE` via C1
+  (`test_unit_missing_record_is_indeterminate`).
+
+### 4.4 Confidence versus workflow state (normative)
+
+The §4.1 "can carry" column describes how the shipped engine and evaluator
+behave together; it is a pairing table, not an evaluator cross-check:
+
+| Workflow state | Confidence the v1 evaluator yields for it |
+|---|---|
+| `COMPLETED` | `VERIFIED`, or `INDETERMINATE` when capped (C0/C1/C2/C7) |
+| `COMPENSATED` | `VERIFIED_WITH_COMPENSATION`, or `INDETERMINATE` when capped |
+| `PARTIALLY_COMPENSATED` | `PARTIAL`, or `INDETERMINATE` when capped |
+| `MANUAL_REQUIRED` | `MANUAL_REQUIRED`, or `INDETERMINATE` when capped |
+| `FAILED` (compensation never started) | `VERIFIED` if every verdict is `RESTORED` and no compensation ran (C7), else `INDETERMINATE` |
+| `CANCELLED` | No manifest: whole-manifest refusal R5 (§5.3) |
+
+Shipped-evaluator fact: `evaluate_recovery` derives confidence from the
+manifest's own fields plus `verify_chain` only. `workflow_state` is recorded
+in `confidence_criteria.evaluated` for audit, but no C-rule branches on it
+(`routes/recovery.py`), so v1 does not refuse state/confidence mismatches.
+A mismatch (e.g. a `COMPENSATED` workflow whose manifest carries manual
+items) therefore indicates an engine or evaluator bug; readers handle it per
+§4.6, never by trusting the stated confidence. `INDETERMINATE` is portable
+across all five evaluatable terminal states: it is a cap, not a state label.
+
+### 4.5 Dominance and capping (normative)
+
+Rule order is dominance order: C0 > C1 > C2 > C3 > C4 > C5/C6 > C7.
+
+- **Ignorance dominates actionability.** Any `UNKNOWN` effect yields
+  `INDETERMINATE` even when manual items are also outstanding (C1 runs
+  before C3). "We don't know" is weaker knowledge than "we know what
+  remains", so it must win.
+- **Actionability dominates partial auto-recovery.** Any manual item yields
+  `MANUAL_REQUIRED` even when compensations are also exhausted (C3 runs
+  before C4). `PARTIAL` therefore requires zero manual items: it means "the
+  machine did all it could and no known human work is pending".
+- **Clean levels require everything.** C5/C6 fire only with all verdicts
+  `RESTORED`, no manual items, no unknowns, and a valid chain — plus
+  compensation ran (C5) or never ran (C6).
+- **The fallthrough never upgrades.** C7 yields `VERIFIED` only for
+  all-`RESTORED` with no compensation run; any other residue yields
+  `INDETERMINATE`. C7 MUST NOT manufacture `PARTIAL` or `MANUAL_REQUIRED`:
+  those need their positive evidence (exhausted attempts, manual items).
+
+### 4.6 Self-contradiction and reader fallback (normative)
+
+C2 is the manifest's self-check, evaluated by the shipper and re-checkable
+by any reader from the manifest body alone:
+
+1. Every `event_ref` / `proof_ref` resolves to a real event sequence in the
+   workflow's timeline.
+2. Every per-action verdict obeys the §2.2 truth table for its
+   (`required`, `effect_state`) pair.
+3. `summary` counts match the arrays (`actions_total`, restored /
+   not-restored / indeterminate split, `manual_items`, `refusals`).
+
+Any failure yields `INDETERMINATE`, whatever else the manifest claims.
+
+**Unenumerated-manual-item bugs.** If a run needed a human but produced no
+`manual_items` entry, the manifest MUST NOT claim a clean level. The gap
+surfaces as a C2 failure (dangling or missing refs) or as a C7 residue
+(`NOT_RESTORED` without manual or exhausted cause) — both read as
+`INDETERMINATE`. Silence about required human work is never `VERIFIED`.
+
+**Chain-invalid cap.** C0 fires before every other rule: a manifest with
+`chain.valid == false` MUST be read as `INDETERMINATE` regardless of its
+stated confidence (§3.5 reader rule). No record — including success
+records — can be trusted once the chain breaks.
+
+**Reader obligation.** Readers MUST recompute C0–C2 from the manifest body
+and, on any failure, treat the manifest as `INDETERMINATE` regardless of
+its stated `recovery_confidence`.
+
+## 5. Refusal codes (normative)
+
+### 5.1 Two tiers
+
+| Tier | Shape | Codes | Manifest? |
+|---|---|---|---|
+| Whole-manifest refusal | HTTP 409, JSON `detail` with `code`, `workflow_state`, `reason`, `retryable: false` | R4, R5 | No manifest is emitted |
+| In-manifest refusal | `refusals[]` entry with `code`, `seq`, `reason`, `event_ref` | `R_CAPABILITY_REFUSAL`, `R_EXTERNAL_MODIFICATION` | Yes; usually `MANUAL_REQUIRED` via C3 |
+
+HTTP 404 `"workflow not found"` (unknown id, or a workflow owned by another
+org) is not a refusal: it carries no R-code and says nothing about recovery.
+
+### 5.2 R4_NOT_TERMINAL
+
+- **Condition:** `wf.state` is not in engine `WF_TERMINAL`
+  (`COMPLETED`, `COMPENSATED`, `PARTIALLY_COMPENSATED`, `MANUAL_REQUIRED`,
+  `FAILED`, `CANCELLED` — `saga.py`). Any live state (`DRAFT` … `READY`,
+  `RUNNING`, `VERIFYING`, `RETRYING`, `COMPENSATING`) refuses.
+- **Shape:** HTTP 409, `detail.code == "R4_NOT_TERMINAL"`,
+  `retryable: false`. The refusal is final for that workflow state; the
+  caller may request a fresh evaluation after the run terminates.
+- **Spec anchor:** the §2.3 rule — the RPE MUST refuse to emit a manifest
+  for non-terminal workflows, because per-action `required` is still moving.
+- Pinned by `test_non_terminal_workflow_is_refused`.
+
+### 5.3 R5_CANCELLED_RUN
+
+- **Condition:** the workflow is terminal but not evaluatable: `CANCELLED`.
+  The v1 evaluatable set is `COMPLETED`, `COMPENSATED`,
+  `PARTIALLY_COMPENSATED`, `MANUAL_REQUIRED`, `FAILED`
+  (`EVALUATABLE_TERMINAL` in `routes/recovery.py`).
+- **Shape:** HTTP 409, `detail.code == "R5_CANCELLED_RUN"`,
+  `retryable: false`.
+- **Rationale:** no confidence level is defined for cancelled runs. A
+  cancelled run may hold partially present effects with no recorded
+  compensation obligation, so any of the five levels would mislabel it.
+  Refusing honestly beats a confident lie.
+
+### 5.4 R_CAPABILITY_REFUSAL
+
+- **Condition:** an action is `VERIFIED` in a compensated run with a manual
+  capability — `IRREVERSIBLE`, `MANUAL_ONLY`, or `UNKNOWN` (`MANUAL_CAPS`,
+  identical sets in `saga.py` and `routes/recovery.py`). The engine never
+  queues these for auto-undo: `_start_compensation` emits
+  `compensation.manual_required` (`"not automatically reversible"`) and the
+  action keeps its verified, still-`PRESENT` effect.
+- **Manifest records:** the action reads `effect_state: PRESENT`,
+  `verdict: NOT_RESTORED`; one `manual_items[]` entry with
+  `cause: capability_refusal`; one `refusals[]` entry with
+  `code: R_CAPABILITY_REFUSAL`, mirroring the manual item's `reason`, with
+  `event_ref` pointing at the `compensation.manual_required` (or
+  `workflow.manual_required`) event.
+- **Capability split (shipped):** `FULLY_REVERSIBLE`,
+  `CONDITIONALLY_REVERSIBLE`, `COMPENSATABLE` are auto-compensated
+  (`COMPENSATABLE_CAPS`); `IRREVERSIBLE`, `MANUAL_ONLY`, `UNKNOWN` always
+  refuse and need a human. `ActionRun.compensation_capability` defaults to
+  `UNKNOWN` (`models.py`), so an unclassified action fails closed to a
+  human, never to silent auto-undo.
+- Pinned by `test_unit_manual_refusal_needs_human`.
+
+### 5.5 R_EXTERNAL_MODIFICATION
+
+- **Condition:** compensation was queued but refused because the target
+  changed incompatibly: action state `COMPENSATION_FAILED` with
+  `action.error` starting `PRECONDITION_FAILED`, effect still `PRESENT`.
+- **Manifest records:** one `manual_items[]` entry with
+  `cause: external_modification`; one `refusals[]` entry with
+  `code: R_EXTERNAL_MODIFICATION`, with `event_ref` pointing at the
+  manual-required event or, failing that, the `COMPENSATION_FAILED`
+  transition.
+- **State-equivalence (§2.5):** the engine's own earlier compensations may
+  advance resource versions without refusing; only genuinely incompatible
+  external changes refuse (`docs/jury/06-security-and-recovery.md`). The
+  refusal protects another actor's newer work from being destroyed by an
+  undo — see the §6.2 scenario.
+- **Naming:** the V2-02 draft example used `R2_EXTERNAL_MODIFICATION`; the
+  shipped evaluator emits `R_EXTERNAL_MODIFICATION` (`routes/recovery.py`,
+  pinned by `test_unit_external_modification_orders_manual_work`). The §3.4
+  example is corrected to the shipped code.
+- Cause-to-code mapping (shipped): `external_modification` →
+  `R_EXTERNAL_MODIFICATION`; every other manual-item cause →
+  `R_CAPABILITY_REFUSAL`.
+
+### 5.6 Code inventory (v1, closed)
+
+v1 defines exactly four refusal codes: `R4_NOT_TERMINAL`,
+`R5_CANCELLED_RUN`, `R_CAPABILITY_REFUSAL`, `R_EXTERNAL_MODIFICATION`.
+There are no R1–R3 codes in the shipped evaluator or its tests; numbers in
+that range MUST NOT be assumed to exist by readers. Whole-manifest codes
+(R4/R5) travel on the HTTP error because there is no manifest to carry
+them; in-manifest codes travel in `refusals[]` with one entry per manual
+item behind them, so `summary.refusals == len(refusals)` doubles as the
+C2 count check.
+
+## 6. Refusal scenarios (informative)
+
+These traces show the engine-to-manifest path for each refusal. They are
+illustrative inputs/outputs for implementers, not measured runs (per §0);
+each names the test that pins the behavior it describes.
+
+### 6.1 Design-time refusal: real-money payment
+
+A connector contract carrying the `no_real_payment` precondition
+(`connectors/sdk.py`) raises `PreconditionFailed("real payments are
+forbidden")` when `charge_real_money` is truthy. The action fails
+certainly before any effect exists (`FAILED`, no trail through
+`SUCCEEDED`/`VERIFYING`/`UNKNOWN_OUTCOME`), so the manifest reads the
+effect `ABSENT` and the verdict `RESTORED` — there was nothing to undo.
+The same shape covers the refused-by-design list in
+`docs/jury/06-security-and-recovery.md` (real payments, mass sends,
+third-party accounts, canceling a mid-flight compensation): those are
+engine refusals, and the manifest surfaces their outcome rather than
+re-refusing them.
+
+### 6.2 Runtime refusal: external modification mid-compensation
+
+1. `crm.create_org` (seq 2, `COMPENSATABLE`) verifies, then billing fails
+   and `_start_compensation` queues seq 2 (`VERIFIED` →
+   `COMPENSATION_PENDING`, `compensation.started` recorded).
+2. Before the undo runs, an external actor advances the org (v1 → v5).
+   `_compensate_one` raises through the version guard and records
+   `COMPENSATING` → `COMPENSATION_FAILED` with
+   `error: "PRECONDITION_FAILED: resource 1 changed (expected v1, found
+   v5); refusing to overwrite a newer state"`.
+3. The evaluator re-reads the effect (`PRESENT`, v5 row still active),
+   emits a manual item (`cause: external_modification`,
+   `suggested_action` points at reconciling the external change) and a
+   `refusals[]` entry with `code: R_EXTERNAL_MODIFICATION`.
+4. One manual item outstanding, everything known → `MANUAL_REQUIRED`
+   via C3.
+5. After the human reconciles and re-runs evaluation, a later manifest
+   reflects the new world; the old manifest stays valid history (§3.5).
+
+Pinned by `test_unit_external_modification_orders_manual_work` (manifest
+path) and `test_concurrent_modification_blocks_compensation` (store-level
+`PreconditionFailed` guard).
+
+### 6.3 Capability refusal: manual-only effect in a compensated run
+
+1. `notify.send_summary` (seq 10, `IRREVERSIBLE`) verifies and sends;
+   a later failure triggers compensation.
+2. `_start_compensation` refuses to queue seq 10, emits
+   `compensation.manual_required`, and records `compensation.started`
+   with `manual_items: 1`. The action stays `VERIFIED`, effect `PRESENT`.
+3. The evaluator emits a manual item (`cause: capability_refusal`) and a
+   `refusals[]` entry with `code: R_CAPABILITY_REFUSAL`.
+4. One manual item outstanding, everything known → `MANUAL_REQUIRED`
+   via C3.
+
+Pinned by `test_unit_manual_refusal_needs_human`.
+
+### 6.4 Exhaustion without human blockers: PARTIAL
+
+`crm.create_org` (seq 2, `COMPENSATABLE`) fails compensation 3 times
+(the engine retries while `_comp_attempts < 3` and records
+`"comp attempt {n}/3"`; `COMPENSATION_FAILED` with attempts ≥ 3 is
+exhausted). The effect is still `PRESENT`, no manual item applies, and
+C3 does not fire — so C4 yields `PARTIAL`: the machine did all it could,
+nothing is unknown, and no known human work is pending. Pinned by
+`test_unit_exhausted_compensation_is_partial`.
+
+### 6.5 Whole-manifest refusals
+
+- Probing a `RUNNING` workflow's manifest returns HTTP 409
+  `R4_NOT_TERMINAL` with the current `workflow_state` echoed in the
+  detail (pinned by `test_non_terminal_workflow_is_refused`). The caller
+  retries the GET after the run reaches a terminal state.
+- Probing a `CANCELLED` workflow returns HTTP 409 `R5_CANCELLED_RUN`:
+  no manifest, no confidence level, no guess about half-present effects.
+
+### 6.6 v1 implementation notes (shipped, informative)
+
+Beyond the §3 schema, the v1 evaluator (`routes/recovery.py`,
+`GET /api/v1/workflows/{id}/recovery-manifest`, registered in `main.py`)
+ships these additional manifest sections; readers MUST ignore unknown
+fields per §3.1, so they are safe extensions:
+
+- `confidence_criteria`: `{rule, decision, evaluated}` — the winning
+  C-rule, a one-line decision rationale, and the evaluated predicates
+  (`workflow_state`, `chain_valid`, `unknowns`, `refs_resolve`,
+  `table_holds`, `counts_match`, `manual_items`,
+  `exhausted_compensations`, `compensation_started`, `all_restored`).
+- `compensations[]`: one entry per action that needed compensation, with
+  `result` in `compensated` | `noop` | `failed` | `refused` |
+  `incomplete`.
+- `divergences[]`: recorded-claim vs current-store-row mismatches
+  (effect still present after recorded compensation, effect lost after
+  recorded success, skipped action left an effect).
+- `indeterminate[]`: one entry per `UNKNOWN` action with its reason.
+- `initial_resources[]` / `created_resources[]` / `final_resources[]`:
+  demo-store snapshots tracing what the run found, made, and left behind.
+
+Producer guarantees (shipped): keys emitted sorted for stable hashing;
+`generator: "reversa-rpe/1.0"`; read-only by construction — the evaluator
+only SELECTs workflows, actions, events, and demo-store rows, never
+appends events, never retries, never compensates, and never calls
+connector execute/verify/compensate. Current store rows can only
+*downgrade* a recorded claim (a divergence); they never upgrade a missing
+record into a proven claim.

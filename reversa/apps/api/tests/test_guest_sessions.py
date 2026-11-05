@@ -224,3 +224,120 @@ def test_owner_traffic_unaffected(client, demo_auth):
                         json={"intent": INTENT, "use_ai": False},
                         headers=demo_auth["headers"])
         assert r.status_code == 201, r.text
+
+
+# --- Cycle 3 (AGENT-12): rate/quota edge regression tests --------------------
+
+
+def test_c3_tier_trailing_slash_mapped():
+    # A trailing slash must not bypass the rate-limit tier.
+    assert ratelimit_mod._tier_for("POST", "/api/v1/intents/") == "intents"
+    assert ratelimit_mod._tier_for("POST", "/api/v1/workflows/7/execute/") == "execute"
+    assert ratelimit_mod._tier_for("POST", "/api/v1/intents") == "intents"
+    assert ratelimit_mod._tier_for("GET", "/api/v1/intents") is None
+    assert ratelimit_mod._tier_for("POST", "/api/v1/workflows/abc/execute") is None
+
+
+def test_c3_check_unknown_tier_fails_open():
+    ok, retry = ratelimit_mod._check("no-such-tier", "k", time.time())
+    assert ok is True
+    assert retry == 0.0
+
+
+def test_c3_check_degenerate_config_clamped(monkeypatch):
+    # limit/window of 0 must not crash or divide; clamped to >= 1.
+    monkeypatch.setitem(ratelimit_mod._TIERS, "intents", (0, 0))
+    now = time.time()
+    assert ratelimit_mod._check("intents", "k", now)[0] is True
+    ok, retry = ratelimit_mod._check("intents", "k", now)
+    assert ok is False
+    assert retry >= 0.0
+
+
+def test_c3_window_rollover_allows_again(monkeypatch):
+    monkeypatch.setitem(ratelimit_mod._TIERS, "intents", (2, 60))
+    t0 = time.time()
+    assert ratelimit_mod._check("intents", "k", t0)[0] is True
+    assert ratelimit_mod._check("intents", "k", t0)[0] is True
+    assert ratelimit_mod._check("intents", "k", t0)[0] is False
+    # After the window expires the same key is admitted with a fresh count.
+    assert ratelimit_mod._check("intents", "k", t0 + 61)[0] is True
+    assert ratelimit_mod._check("intents", "k", t0 + 61)[0] is True
+    assert ratelimit_mod._check("intents", "k", t0 + 61)[0] is False
+
+
+def test_c3_window_store_bounded_expired_purged(monkeypatch):
+    monkeypatch.setattr(ratelimit_mod, "_MAX_WINDOWS", 5)
+    now = time.time()
+    for i in range(8):  # all expired long ago
+        ratelimit_mod._WINDOWS[("intents", f"stale-{i}")] = [now - 3600, 3]
+    assert ratelimit_mod._check("intents", "fresh", now)[0] is True
+    # 8 stale -> purged down to cap (5), then the fresh insert lands: 6.
+    assert len(ratelimit_mod._WINDOWS) == 6
+    assert ("intents", "fresh") in ratelimit_mod._WINDOWS
+
+
+def test_c3_window_store_bounded_oldest_evicted(monkeypatch):
+    monkeypatch.setattr(ratelimit_mod, "_MAX_WINDOWS", 3)
+    now = time.time()
+    for i in range(5):  # all fresh: oldest-first eviction must kick in
+        ratelimit_mod._WINDOWS[("intents", f"old-{i}")] = [now - i, 1]
+    assert ratelimit_mod._check("intents", "new", now)[0] is True
+    keys = {k[1] for k in ratelimit_mod._WINDOWS}
+    assert "new" in keys
+    assert "old-4" not in keys and "old-3" not in keys  # oldest evicted
+    assert len(ratelimit_mod._WINDOWS) <= 4  # cap + one in-flight insert
+
+
+def test_c3_rate_limit_retry_after_positive_int(client, demo_auth, monkeypatch):
+    monkeypatch.setitem(ratelimit_mod._TIERS, "intents", (1, 60))
+    r = client.post("/api/v1/intents", json={"intent": INTENT, "use_ai": False},
+                    headers=demo_auth["headers"])
+    assert r.status_code == 201, r.text
+    r = client.post("/api/v1/intents", json={"intent": INTENT, "use_ai": False},
+                    headers=demo_auth["headers"])
+    assert r.status_code == 429
+    assert int(r.headers["Retry-After"]) >= 1
+
+
+def test_c3_guest_mint_bounds_rejected(client, demo_auth):
+    for payload in ({"max_workflows": 0}, {"max_workflows": 21},
+                    {"max_executes": 0}, {"max_executes": 51},
+                    {"max_workflows": -1, "max_executes": -5}):
+        r = client.post("/api/v1/demo/guest-sessions", json=payload,
+                        headers=demo_auth["headers"])
+        assert r.status_code == 422, (payload, r.text)
+
+
+def test_c3_guest_mint_at_maximum_ok(client, demo_auth):
+    body = _mint(client, demo_auth, max_workflows=20, max_executes=50)
+    assert body["max_workflows"] == 20
+    assert body["max_executes"] == 50
+
+
+def test_c3_quota_exhaustion_isolated_to_session(client, demo_auth):
+    # Boundary: max_workflows=1 allows exactly one intent, then 410 ...
+    guest_a = _guest_auth(_mint(client, demo_auth, max_workflows=1))
+    r = client.post("/api/v1/intents", json={"intent": INTENT, "use_ai": False},
+                    headers=guest_a["headers"])
+    assert r.status_code == 201, r.text
+    r = client.post("/api/v1/intents", json={"intent": INTENT, "use_ai": False},
+                    headers=guest_a["headers"])
+    assert r.status_code == 410
+    assert r.json()["code"] == "QUOTA_EXHAUSTED"
+    # ... while a fresh sibling session from the same owner still works.
+    guest_b = _guest_auth(_mint(client, demo_auth, max_workflows=1))
+    r = client.post("/api/v1/intents", json={"intent": INTENT, "use_ai": False},
+                    headers=guest_b["headers"])
+    assert r.status_code == 201, r.text
+
+
+def test_c3_expired_guest_execute_rejected_403(client, demo_auth):
+    minted = _mint(client, demo_auth)
+    guest = _guest_auth(minted)
+    made = make_ready(client, guest)
+    auth_mod._GUEST_SESSIONS[hash_token(
+        minted["credential"])]["expires_at"] = time.time() - 1
+    r = client.post(f"/api/v1/workflows/{made['workflow']['id']}/execute",
+                    headers=guest["headers"])
+    assert r.status_code == 403  # expired: auth rejection, never 410/500

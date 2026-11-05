@@ -38,9 +38,9 @@ empty); this matrix is designed from the inspected code and the cycle-1 mandate.
 |---|---|---|---|---|
 | CM-01 | Billing 500s exhaust retries | `http500` ×5 on `demo-billing` | `COMPENSATED`; reverse order 8,7,5,4,3,2,1; seqs 9–10 `SKIPPED`; resources restored; chain valid | EXISTS — `reversa/apps/api/tests/test_chaos.py::test_billing_failure_compensates_everything` |
 | CM-02 | Timeout reconciles then succeeds | `timeout` ×1 on `demo-crm/crm.validate_customer` | `COMPLETED`; `chaos.injected` + `UNKNOWN_OUTCOME` in events; 10× `VERIFIED` | EXISTS — `test_engine_units.py::test_unknown_outcome_reconciles_to_failed_then_retries` |
-| CM-03 | Rate-limit retries with backoff | `http429` ×5 on `demo-billing` | `COMPENSATED`; `RETRY_SCHEDULED` + `action.retry_wait` events present | MISSING |
-| CM-04 | Malformed response fails fast | `malformed` ×1 on `demo-billing` | `COMPENSATED`; `FAILED` with NO `RETRY_SCHEDULED` (non-retryable) | MISSING |
-| CM-05 | Worker crash reconciles | `crash` ×1 on `demo-crm/crm.validate_customer` | `COMPLETED` via `UNKNOWN_OUTCOME` → reconcile (distinct `CHAOS_CRASH` code) | MISSING |
+| CM-03 | Rate-limit retries with backoff | `http429` ×5 on `demo-billing` | `COMPENSATED`; `RETRY_SCHEDULED` + `action.retry_wait` events present | EXISTS — `test_chaos_matrix.py::test_cm03_rate_limit_retries_then_compensates` |
+| CM-04 | Malformed response fails fast | `malformed` ×1 on `demo-billing` | `COMPENSATED`; `FAILED` with NO `RETRY_SCHEDULED` (non-retryable) | EXISTS — `test_chaos_matrix.py::test_cm04_malformed_fails_fast_no_retry` |
+| CM-05 | Worker crash reconciles | `crash` ×1 on `demo-crm/crm.validate_customer` | `COMPLETED` via `UNKNOWN_OUTCOME` → reconcile (distinct `CHAOS_CRASH` code) | EXISTS — `test_chaos_matrix.py::test_cm05_worker_crash_reconciles_to_completed` |
 | CM-06 | Latency degrades, never fails | `latency` ×1 on `demo-billing` | `COMPLETED`; `chaos.injected` present; no `FAILED` states | MISSING |
 | CM-07 | Early-step failure, minimal compensation | `http500` ×5 on `demo-crm/crm.create_organization` (seq 2) | `COMPENSATED`; seq 1 `COMPENSATED`, seqs 3–10 `SKIPPED` | MISSING |
 
@@ -49,18 +49,18 @@ empty); this matrix is designed from the inspected code and the cycle-1 mandate.
 | ID | Scenario | Request | Expected | Coverage |
 |---|---|---|---|---|
 | CM-08 | Real tenant forbidden | Inject as non-demo org | `403` | EXISTS — `test_security.py::test_chaos_forbidden_for_real_tenant` |
-| CM-09 | Rule lifecycle | POST → GET lists → DELETE → GET empty; DELETE unknown | `201`/`200`/`200`; unknown → `404` | MISSING |
-| CM-10 | Input validation | Unknown fault; unknown connector; `times` 0 / 11 | `422` in all cases | MISSING |
-| CM-11 | Action scoping + times budget | Rule for action A while B runs (same connector); `times=1` then clean retry | Mismatch never fires and never consumes budget; single-shot fault → `COMPLETED` | MISSING |
+| CM-09 | Rule lifecycle | POST → GET lists → DELETE → GET empty; DELETE unknown | `201`/`200`/`200`; unknown → `404` | EXISTS — `test_chaos_matrix.py::test_cm09_chaos_rule_lifecycle` |
+| CM-10 | Input validation | Unknown fault; unknown connector; `times` 0 / 11 | `422` in all cases | EXISTS — `test_chaos_matrix.py::test_cm10_chaos_input_validation` |
+| CM-11 | Action scoping + times budget | Rule for action A while B runs (same connector); `times=1` then clean retry | Mismatch never fires and never consumes budget; single-shot fault → `COMPLETED` | EXISTS — `test_chaos_matrix.py::test_cm11_action_scoping_and_times_budget` |
 | CM-12 | Flag + org isolation | `REVERSA_CHAOS=0` inject; org-A rule vs org-B workflow | `403`; org B `COMPLETED` unaffected | MISSING |
 
 ## C. Compensation outcomes (CM-13–CM-16)
 
 | ID | Scenario | Setup | Expected terminal state | Coverage |
 |---|---|---|---|---|
-| CM-13 | Conditional compensation refused | `invoice_issued` set on billing profile mid-run + billing chaos | `PARTIALLY_COMPENSATED` | MISSING |
+| CM-13 | Conditional compensation refused | `invoice_issued` set on billing profile mid-run + billing chaos | `PARTIALLY_COMPENSATED` | EXISTS — `test_chaos_matrix.py::test_cm13_conditional_compensation_refused` |
 | CM-14 | External change blocks compensation (e2e) | Version-bump a `VERIFIED` resource mid-run, then fail billing | `PARTIALLY_COMPENSATED` (or `MANUAL_REQUIRED`); store-level raise EXISTS — `test_chaos.py::test_concurrent_modification_blocks_compensation`, e2e MISSING | MISSING (e2e) |
-| CM-15 | Irreversible step forces human path | Custom plan: `notify.send_summary` (VERIFIED) then failing billing step | `MANUAL_REQUIRED` with manual item naming notify | MISSING |
+| CM-15 | Irreversible step forces human path | Custom plan: `notify.send_summary` (VERIFIED) then failing billing step | `MANUAL_REQUIRED` with manual item naming notify | EXISTS — `test_chaos_matrix.py::test_cm15_irreversible_step_forces_manual_path` |
 | CM-16 | Late read-only failure | `http500` ×5 on `reversa-core/core.consistency_check` (seq 9) | `COMPENSATED`; seq 10 `SKIPPED` (never sent) | MISSING |
 
 ## D. Concurrency and crash recovery (CM-17–CM-18)
@@ -79,10 +79,10 @@ empty); this matrix is designed from the inspected code and the cycle-1 mandate.
 
 ## Tally
 
-- Covered: 10/20 — CM-01, CM-02, CM-08, CM-19, CM-20 (cycle V2-01) + CM-04, CM-03, CM-05,
-  CM-10, CM-09 (cycle V2-02, `tests/test_chaos_matrix.py`) + 2 partial (CM-14 store-level,
-  CM-18 COMPLETED-sibling).
-- Missing: 10 (priority order: CM-11, CM-13, CM-14, CM-15, CM-06, CM-07, CM-16, CM-12, CM-17, CM-18).
+- Covered: 13/20 — CM-01, CM-02, CM-08, CM-19, CM-20 (cycle V2-01) + CM-04, CM-03, CM-05,
+  CM-10, CM-09 (cycle V2-02) + CM-11, CM-13, CM-15 (cycle V2-03, all in
+  `tests/test_chaos_matrix.py`) + 2 partial (CM-14 store-level, CM-18 COMPLETED-sibling).
+- Missing: 7 (priority order: CM-14, CM-06, CM-07, CM-16, CM-12, CM-17, CM-18).
 
 ## Observations for implementers (not changes)
 

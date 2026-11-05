@@ -327,13 +327,13 @@ class GithubConnector(Connector):
             raise ConnectorError(
                 "GITHUB_RETRYABLE",
                 f"GitHub API {response.status_code} on {method} {path}",
-                retryable=True)
+                retryable=True, status_code=response.status_code)
         if response.status_code >= 400:
             raise ConnectorError(
                 "GITHUB_API_ERROR",
                 f"GitHub API {response.status_code} on {method} {path}: "
                 f"{response.text[:300]}",
-                retryable=False)
+                retryable=False, status_code=response.status_code)
         if response.status_code == 204:
             return {}
         return response.json()
@@ -397,7 +397,9 @@ class GithubConnector(Connector):
             with self._client(token) as client:
                 issue = self._get_issue(client, repo, number)
         except ConnectorError as exc:
-            if exc.code == "GITHUB_API_ERROR" and " 404 " in str(exc):
+            # V3-1: structured status only — a 403 whose body mentions
+            # "404" must never read as absence.
+            if exc.code == "GITHUB_API_ERROR" and exc.status_code == 404:
                 return False
             raise
         if action.action_type == "github.create_issue":
