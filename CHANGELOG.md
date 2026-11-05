@@ -6,9 +6,51 @@ Test counts were observed by executing the API suite against pristine
 (Python 3.14.4, pytest 9.2.0) on 2026-11-05, and independently re-run by
 the orchestrator on the merged trees before commit (see VERIFIED notes).
 
-Skips in both releases are the same two honest conditional skips
+Skips in all releases are the same two honest conditional skips
 (Vultr live-provider eval, GitHub live cycle); no Vultr/GitHub secrets
 were present in the environment when the counts were observed.
+
+## V2-03 — Jury Mode, F3/F4, 30-case AI eval, CM 13/20, CI gates, video V2
+
+- Commit: `f777543` ("V2-03: Jury Mode, F3/F4, 30-case AI eval, CM 13/20,
+  CI gates, video V2, 404-sniff+CLI fixes"), 2026-11-05.
+- API suite: **204 passed, 2 skipped, 0 failed (VERIFIED by orchestrator
+  re-run on the merged tree)** — 206 collected, ~49 s (same standing
+  Starlette warning). Delta +61 vs V2-02: +4 AI eval, +11 guest/ratelimit,
+  +2 engine (F3), +3 chaos matrix, +1 perf (F4), +6 connectors routes (new),
+  +30 negative matrix (new), +3 CLI malformed-bundle, +1 GitHub 403/404.
+
+### Added
+
+- Jury Mode 1-click (`components/JuryLaunch.tsx`, `lib/api.ts` `apiAs()`
+  helper): check → mint guest → create → approve → execute with honest
+  per-phase states and separate guest localStorage keys.
+- Nav links for `/recovery-race` + `/time-machine`; DecisionInspector card
+  on the workflow detail view (real created-payload data).
+- CI gates: docker image-build job (api+web, no push) + secrets-scan job
+  (fail-closed on token patterns / PEM headers).
+- Video V2: `docs/jury/demo-v2.mp4` (85 s, 1280×800, h264+AAC voiceover)
+  + `demo-v2.srt` + 6 scene clips; v1 kept as fallback.
+- Chaos CM-11 (scoping+budget), CM-13 (conditional refusal),
+  CM-15 (irreversible → MANUAL_REQUIRED): tally 13/20.
+- AI eval 10 → 30 offline cases (legit/ambiguous/contradictory/
+  impossible/injection/dangerous) with per-category summary.
+- RPE spec sections 4.4–6 restored incl. section 5 refusal codes;
+  GitHub live-enablement runbook.
+
+### Fixed
+
+- F3 chaos multi-rule shadowing: matching-rule predicate in query,
+  lowest-id MATCHING rule fires (was: first rule shadowed the rest).
+- F4 evidence export double-read: single-pass `_bundle()` via
+  `verify_chain_rows` (~11% faster, byte-identical output).
+- P0 404-sniff: `ConnectorError.status_code` is now structured; only a
+  real HTTP 404 reads as absence (a 403 mentioning "404" raises).
+- CLI verifier: malformed bundles / garbage files / missing files return
+  INVALID (exit 1), never traceback.
+- Docs: README counts, chaos tally + row cells, refused-by-design
+  narrowing (only `no_real_payment` + mid-flight-cancel are
+  code-enforced), recovery.py docstring.
 
 ## V2-02 — Recovery Proof, resume, guest sessions, rate limits
 
