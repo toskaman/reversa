@@ -48,6 +48,8 @@ app.add_middleware(
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
+    # Cycle 2 §6: let the browser UI read the intent provenance headers.
+    expose_headers=list(workflows_routes.PROVENANCE_HEADERS),
 )
 # P1-AUTH-02: guest restrictions run first (outermost), then rate limits.
 app.add_middleware(RateLimitMiddleware)

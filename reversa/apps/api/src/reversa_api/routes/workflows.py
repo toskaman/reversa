@@ -134,7 +134,60 @@ def _refusal_contract(issues, normalized, result):
     else:
         body = RefusalOut(code=issue.code, reason=issue.message[:500],
                           provider=result.provider, warnings=result.warnings)
-    return JSONResponse(status_code=200, content=body.model_dump())
+    return JSONResponse(status_code=200, content=body.model_dump(),
+                        headers=_provenance_headers(
+                            result.provider, result.model,
+                            result.latency_ms, result.warnings))
+
+
+# Cycle 2 provenance headers (spec §6): every POST /intents outcome (201
+# plan, 200 clarify, 200 refuse) carries the planner provenance as HTTP
+# headers so clients can log or display it without parsing the body. The
+# JSON body stays canonical; warnings travel as a count because header
+# values must be ASCII (Starlette rejects non-latin-1 bytes).
+PROVENANCE_HEADERS = (
+    "X-Reversa-Provider",
+    "X-Reversa-Model",
+    "X-Reversa-Latency-Ms",
+    "X-Reversa-Warnings",
+)
+
+
+def _provenance_headers(provider: str, model: str = "",
+                        latency_ms: int = 0, warnings=()) -> dict[str, str]:
+    """Provenance header fields for an intent response (always ASCII)."""
+
+    def _safe(value) -> str:
+        text = str(value or "")
+        return text.encode("ascii", "replace").decode("ascii")[:200]
+
+    try:
+        latency = max(0, int(latency_ms))
+    except (TypeError, ValueError):
+        latency = 0
+    count = len(warnings) if isinstance(warnings, (list, tuple)) else 0
+    return {
+        "X-Reversa-Provider": _safe(provider) or "deterministic",
+        "X-Reversa-Model": _safe(model),
+        "X-Reversa-Latency-Ms": str(latency),
+        "X-Reversa-Warnings": str(count),
+    }
+
+
+# Cycle 2: default workflow names follow the gate domain so offboarding
+# and escalation runs stop being titled "Onboard ...". An explicit
+# request name always wins; unknown labels keep the legacy verb.
+_DOMAIN_NAME_VERBS = {
+    "onboarding": "Onboard",
+    "offboarding": "Offboard",
+    "escalation": "Escalate",
+}
+
+
+def _default_workflow_name(label: str | None, customer: dict) -> str:
+    verb = _DOMAIN_NAME_VERBS.get(label or "onboarding", "Onboard")
+    company = (customer or {}).get("company_name", "customer")
+    return f"{verb} {company}"
 
 
 def _plan_steps(wf: Workflow) -> list[dict]:
@@ -184,15 +237,25 @@ def create_from_intent(body: IntentIn, org: OrgCtx = Depends(get_current_org),
                        session=Depends(get_session)):
     # Cycle 2 §2/§3: the deterministic gate short-circuits ambiguous and
     # offscope intents before any planning; these paths create no workflow.
+    _gate_started = time.perf_counter()
     verdict = _cycle2_gate_verdict(body.intent)
+    gate_ms = int((time.perf_counter() - _gate_started) * 1000)
     if verdict is not None and verdict.label == "ambiguous":
         clarify = ClarificationOut(
             questions=_questions_for_verdict(verdict), provider="deterministic")
-        return JSONResponse(status_code=200, content=clarify.model_dump())
+        return JSONResponse(
+            status_code=200, content=clarify.model_dump(),
+            headers=_provenance_headers(
+                "deterministic", latency_ms=gate_ms,
+                warnings=clarify.warnings))
     if verdict is not None and verdict.label == "offscope":
         code, reason = _refusal_for_gate_verdict(verdict)
         refused = RefusalOut(code=code, reason=reason, provider="deterministic")
-        return JSONResponse(status_code=200, content=refused.model_dump())
+        return JSONResponse(
+            status_code=200, content=refused.model_dump(),
+            headers=_provenance_headers(
+                "deterministic", latency_ms=gate_ms,
+                warnings=refused.warnings))
     result = plan_from_intent(body.intent, body.customer, body.use_ai)
     normalized, approval_required, issues = validate_plan({"steps": result.steps})
     if issues:
@@ -204,7 +267,8 @@ def create_from_intent(body: IntentIn, org: OrgCtx = Depends(get_current_org),
             "message": "planner output failed validation",
             "details": {"issues": [i.to_dict() for i in issues]},
             "retryable": False})
-    name = body.name or f"Onboard {body.customer.get('company_name', 'customer')}"
+    label = getattr(verdict, "label", None)
+    name = body.name or _default_workflow_name(label, body.customer)
     wf = Workflow(org_id=org.org_id, name=name[:128], intent=body.intent,
                   state="DRAFT", plan_version=1,
                   plan_json=json.dumps({"goal": body.intent, "steps": normalized}),
@@ -236,9 +300,14 @@ def create_from_intent(body: IntentIn, org: OrgCtx = Depends(get_current_org),
     else:
         _set_state(session, wf, "READY", org.actor, "auto-allowed")
     session.commit()
-    return {"workflow": _out(session, wf, org.slug), "plan_hash": plan_hash(normalized),
-            "approval_required": approval_required, "provider": result.provider,
-            "warnings": result.warnings}
+    content = {"workflow": _out(session, wf, org.slug).model_dump(),
+               "plan_hash": plan_hash(normalized),
+               "approval_required": approval_required,
+               "provider": result.provider, "warnings": result.warnings}
+    return JSONResponse(status_code=201, content=content,
+                        headers=_provenance_headers(
+                            result.provider, result.model,
+                            result.latency_ms, result.warnings))
 
 
 @router.get("/workflows")
