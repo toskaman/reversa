@@ -41,7 +41,13 @@ LabLab dashboard before submitting — rules may change.
 - Cash $9,000 + $5,000 Vultr credits. 1st: $5,000 + $3,000 credits.
   2nd: $3,000 + $1,000 credits. 3rd: $1,000. Distribution up to 90 days.
 
+## Deadline (verified from page schedule JSON, 2026-11-05)
+
+- **End of Submissions: Mon Nov 9, 03:00 GMT+4** = Sun Nov 8, 23:00 UTC =
+  **Mon Nov 9, 00:00 Paris** = Sun Nov 8, 16:00 Salt Lake City.
+- On-site Nov 8: doors 17:00 Paris, remarks 17:30, close 02:00 Paris.
+- Re-check the dashboard before submitting (times may shift).
+
 ## Still to verify on dashboard
 
-- Exact submission deadline time on 8 Nov (timezone).
 - Max video duration. Required submission fields. HR data sensitivity notes.
