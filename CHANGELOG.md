@@ -10,6 +10,23 @@ Skips in all releases are the same two honest conditional skips
 (Vultr live-provider eval, GitHub live cycle); no Vultr/GitHub secrets
 were present in the environment when the counts were observed.
 
+## RC3 — AI planning reliable live (0.2.0-rc.3)
+
+- Commit: `25a6142` ("AI reliability: users-shape prompt rule + 8k
+  token budget (0.2.0-rc.3)"), tag `v0.2.0-rc.3`, 2026-11-05.
+- API suite: **258 passed, 2 skipped, 0 failed** — 260 collected.
+  Delta +1 vs RC2 (offline retry-loop test for the live failure shape).
+- CI: 4/4 jobs green on the RC commit (api, web, docker, secrets-scan).
+
+### Fixed
+
+- Model emitted `"users": 6` (headcount, not objects) → repeated
+  `PLAN_REJECTED`: system prompt now pins the nested `users` shape
+  with an expansion rule + example (verified 2/2 valid full plans
+  live before commit).
+- `max_tokens` 2000 → 8000: reasoning models spend ~700–1800
+  tokens thinking; 2000 truncated plans mid-JSON (measured live).
+
 ## RC2 — Vultr Inference live + AI-shape hardening (0.2.0-rc.2)
 
 - Commit: `2804f15` ("AI-shape hardening: nested users validation +

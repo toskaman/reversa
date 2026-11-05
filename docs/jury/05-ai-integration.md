@@ -29,7 +29,15 @@ rejected with typed errors, and since RC2 nested `users` shapes are
 validated both at plan time and in the executor
 (`PreconditionFailed`, clean FAILED — no 500).
 
+RC3 hardened live reliability: the model sometimes emitted `"users": 6`
+(a headcount, not objects) and `max_tokens: 2000` truncated reasoning
+models mid-JSON (measured: ~700–1800 reasoning tokens). The system
+prompt now pins the nested `users` shape with an expansion rule, and
+the budget is 8000 tokens — verified with 2/2 valid full plans live
+before release. The retry loop (invalid → typed errors → corrected
+plan) is also pinned offline in `test_ai_eval.py`.
+
 Eval set (30 offline cases: legit, ambiguous, contradictory, impossible,
 injection, dangerous; per-category summary in `tests/test_ai_eval.py`)
-is implemented and green; full live LLM-vs-baseline scoring is scheduled
-post-RC2-deploy and will be reported with measured numbers only.
+is implemented and green; full live LLM-vs-baseline scoring runs against
+RC3 and will be reported with measured numbers only.

@@ -6,7 +6,7 @@ Verified 2026-11-05 (this list is the gate; all green):
 - [x] Fresh intent → approve → execute → COMPLETED remotely (59-event chain).
 - [x] Chaos run remotely → COMPENSATED with reverse-order proofs.
 - [x] Evidence JSON validates with the offline CLI.
-- [x] Backend suite 257 passed / 2 honest skips (RC `v0.2.0-rc.2`); browser E2E 9/9
+- [x] Backend suite 258 passed / 2 honest skips (RC `v0.2.0-rc.3`); browser E2E 9/9
   with 0 console errors, re-run against prod on 2026-11-05; benchmarks published.
 - [x] Vultr Inference live in prod (`deepseek-v4.1-flash-1017`): real AI plan
   via guest intent (201, 10 steps, accepted after 2 attempts); malformed AI
