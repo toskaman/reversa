@@ -24,6 +24,19 @@ def test_deterministic_planner_valid_10_steps():
     assert approval_required is True
 
 
+def test_validate_rejects_non_object_users():
+    """AI-shaped users (strings, not {email} objects) must be rejected at plan time."""
+    _, _, issues = validate_plan({"steps": [
+        {"action_type": "identity.provision_users", "connector_id": "demo-identity",
+         "inputs": {"workspace": "w", "users": ["not-a-dict"]}, "depends_on": []}]})
+    assert any(i.code == "BAD_INPUT_TYPE" and "users" in i.field for i in issues)
+    _, _, issues = validate_plan({"steps": [
+        {"action_type": "identity.provision_users", "connector_id": "demo-identity",
+         "inputs": {"workspace": "w", "users": [{"email": "a@x.com", "name": "A"}]},
+         "depends_on": []}]})
+    assert issues == []
+
+
 def test_validate_rejects_unknown_action_bad_deps():
     _, _, issues = validate_plan({"steps": [
         {"action_type": "nope.doit", "connector_id": "demo-crm",

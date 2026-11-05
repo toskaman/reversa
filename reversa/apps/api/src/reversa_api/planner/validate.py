@@ -82,6 +82,16 @@ def validate_plan(plan: dict) -> tuple[list[dict], bool, list[ValidationIssue]]:
                 issues.append(ValidationIssue(
                     "BAD_INPUT_TYPE", i, f"inputs.{key}",
                     f"'{key}' must be {typename}"))
+        if (action_type == "identity.provision_users"
+                and isinstance(inputs.get("users"), list)):
+            for j, user in enumerate(inputs["users"]):
+                if (not isinstance(user, dict)
+                        or not isinstance(user.get("email"), str)
+                        or not user["email"].strip()):
+                    issues.append(ValidationIssue(
+                        "BAD_INPUT_TYPE", i, f"inputs.users[{j}]",
+                        "'users' elements must be objects with a non-empty 'email'"))
+                    break
         normalized.append({
             "seq": i,
             "action_type": action_type,

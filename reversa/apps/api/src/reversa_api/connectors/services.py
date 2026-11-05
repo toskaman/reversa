@@ -379,6 +379,12 @@ class IdentityConnector(Connector):
             users = inputs["users"]
             if not isinstance(users, list) or not users:
                 raise PreconditionFailed("users must be a non-empty list")
+            for user in users:
+                if (not isinstance(user, dict)
+                        or not isinstance(user.get("email"), str)
+                        or not user["email"].strip()):
+                    raise PreconditionFailed(
+                        "each user must be an object with a non-empty 'email'")
             refs = []
             for user in users:
                 row = self.db.create(

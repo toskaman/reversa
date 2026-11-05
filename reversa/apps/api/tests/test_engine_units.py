@@ -579,6 +579,36 @@ def test_resume_compensating_states_recover(fresh_db, demo_auth):
     assert result["stats"]["comp_failed"] == 1, result
 
 
+def test_malformed_users_fail_cleanly_never_crash(fresh_db, demo_auth):
+    """AI-shaped users (strings) must FAIL the action typed, never raise (prod 500)."""
+    session = session_for("main")()
+    try:
+        wf = Workflow(org_id=demo_auth["org_id"], name="t", intent="t",
+                      state="RUNNING", plan_json="{}", created_by="test")
+        session.add(wf)
+        session.flush()
+        _seed_action(session, wf.id, seq=1, state="PENDING", key="k-malformed-users",
+                      action_type="identity.provision_users",
+                      inputs={"workspace": "w", "users": ["not-a-dict"]},
+                      attempt=0, max_attempts=1, capability="COMPENSATABLE")
+        session.commit()
+        wf_id = wf.id
+    finally:
+        session.close()
+    final = execute_workflow_sync(session_for("main"), wf_id, worker_id="w")
+    # Saga semantics: forward failure with zero outstanding effects ends
+    # COMPENSATED (vacuous: nothing to undo), the action itself stays FAILED.
+    assert final == "COMPENSATED"
+    session = session_for("main")()
+    try:
+        action = session.query(ActionRun).filter_by(
+            idempotency_key="k-malformed-users").one()
+        assert action.state == "FAILED"
+        assert action.error.startswith("PRECONDITION_FAILED"), action.error
+    finally:
+        session.close()
+
+
 def test_resume_live_lease_untouched(fresh_db, demo_auth):
     """Fresh leases are never stolen by resume (counted as live)."""
     import datetime as dt
