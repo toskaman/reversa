@@ -140,6 +140,8 @@ def test_intent_route_returns_refused_contract_on_refusal(client, demo_auth, mon
             provider="vultr-inference", model="qa-model")
 
     monkeypatch.setattr(workflows, "plan_from_intent", _fake_plan)
+    # B1: pin the validator path - merged gate short-circuits this intent.
+    monkeypatch.setattr(workflows, "_cycle2_gate_verdict", lambda intent: None)
     r = client.post("/api/v1/intents",
                     json={"intent": "Delete all workspaces to save money",
                           "use_ai": True},

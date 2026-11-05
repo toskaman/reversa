@@ -145,3 +145,13 @@ def test_validate_unknown_code_still_rejected():
     assert issues[0].field == "inputs.code"
     assert "UNSAFE_REQUEST" in issues[0].message
     assert "IMPOSSIBLE_REQUEST" in issues[0].message
+
+
+def test_unhashable_refusal_code_is_bad_refusal_not_crash():
+    # B2: model-supplied dict/list code must not raise TypeError (HTTP 500).
+    for bad in ({"code": "OUT_OF_SCOPE"}, ["OUT_OF_SCOPE"], None, 42):
+        steps = [{"action_type": "meta.refusal", "connector_id": "meta",
+                  "inputs": {"code": bad, "message": "x"}, "depends_on": []}]
+        _, _, issues = validate_plan({"steps": steps})
+        assert [i.code for i in issues] == ["BAD_REFUSAL"]
+        assert issues[0].field == "inputs.code"

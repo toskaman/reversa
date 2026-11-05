@@ -172,7 +172,8 @@ class VultrInferenceProvider(LLMProvider):
                 continue
             refusal = parsed.get("refusal") if isinstance(parsed, dict) else None
             clarify = parsed.get("clarify") if isinstance(parsed, dict) else None
-            if isinstance(refusal, dict) and refusal.get("code") in REFUSAL_CODES:
+            _rcode = refusal.get("code") if isinstance(refusal, dict) else None
+            if isinstance(_rcode, str) and _rcode in REFUSAL_CODES:
                 # Structured refusal: terminal output, not an error. The
                 # sentinel steps fail validate_plan with the typed code, so
                 # the existing 422 PLAN_REJECTED path carries it unchanged.

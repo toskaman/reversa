@@ -122,7 +122,7 @@ def validate_plan(plan: dict) -> tuple[list[dict], bool, list[ValidationIssue]]:
             code = inputs.get("code", "")
             message = inputs.get("message", "")
             questions = inputs.get("questions")
-            if code not in REFUSAL_CODES:
+            if not isinstance(code, str) or code not in REFUSAL_CODES:
                 issues.append(ValidationIssue(
                     "BAD_REFUSAL", i, "inputs.code",
                     f"refusal code must be one of {sorted(REFUSAL_CODES)}"))
