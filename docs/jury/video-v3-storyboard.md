@@ -1,5 +1,13 @@
 # REVERSA V3 — Storyboard delta (AGENT-19, cycle 1 V3)
 
+> RC6 addendum (2026-11-05, orchestrateur) : ce relevé date de l'ère
+> RC3/RC4 — chiffres §2–§4 périmés pour le re-render en attente.
+> Valeurs RC6 à utiliser : **689 tests + 2 skips** (was 363), **browser
+> 10/10** (was 9/9), **chaos invité org-scoped** (cap 50, RC6 —
+> le jury injecte la panne lui-même), **eval 100 cas + 2×10 live**
+> (31 975 tokens). S6 VO / carte finale : remplacer « 363 checks »
+> par « 689 checks ». Upload LabLab reste `demo-v2.mp4`.
+
 Status : STORYBOARD UNIQUEMENT. Aucun média reconstruit ce cycle.
 Re-render : NON — toolchain partiellement supervisée (voir §5, verdict +
 protocole). Fichier jury : upload LabLab reste `demo-v2.mp4`.

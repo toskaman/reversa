@@ -33,20 +33,22 @@ offline.
 
 On the live demo, one click launches Jury Mode with zero token —
 it mints its own guest session, then runs plan, approval and 10 verified
-steps across 5 systems. Then (with the demo-owner token) hit INJECT
-FAILURE: billing goes down, and you watch detection, compensation and
-restoration happen for real — resources before, during and after.
+steps across 5 systems. Then hit INJECT FAILURE yourself (guests inject
+org-scoped chaos, capped and auto-cleaned): billing goes down, and you
+watch detection, compensation and restoration happen for real —
+resources before, during and after.
 
 Built with FastAPI, Next.js, Postgres and Docker Compose, deployed on one
 Vultr Cloud Compute VM with automatic TLS. AI planning is fenced and
 honest: Vultr Inference is live in prod (deepseek-v4.1-flash-1017) — real
 AI plans are accepted only after strict validation, malformed drafts are
 rejected (422) and never executed, and the deterministic baseline remains
-the default with explicit fallback. A 100-case offline eval ships in-repo
-(baseline 100% schema-valid, 0% refusal — a stated limitation). Release
-0.2.0-rc.4 ships a 363-test API suite (2 honest skips), 20/20 chaos-matrix
-scenarios, and per-run recovery manifests — every claim re-runnable from
-the repo.
+the default with explicit fallback. Ambiguous intents get structured
+clarification, off-scope ones an explicit refusal — never a silent
+wrong template. Evals ship in-repo: 100 offline cases plus a 2×10 live
+Vultr campaign (31,975 tokens). Release 0.2.0-rc.6 ships a 689-test API
+suite (2 honest skips), 20/20 chaos-matrix scenarios, and per-run
+recovery manifests — every claim re-runnable from the repo.
 
 Reversible where possible. Accountable everywhere.
 
@@ -67,5 +69,5 @@ saga, self-healing, vultr, workflows
 - Video: (upload docs/jury/demo-v2.mp4 — 85 s narrated, 6 scenes, SRT included; v1 demo.mp4 kept as fallback)
 - Slides: docs/jury/slides.pdf (source: docs/jury/build_slides.py + slides.md)
 - Cover: docs/jury/cover.png (16:10) or cover-16x9.png (16:9)
-- Gallery: docs/jury/gallery/ (8 authentic captures)
+- Gallery: docs/jury/gallery/ (12 authentic captures, incl. 4 agentic flows)
 - Evidence: run any workflow → Evidence → Download JSON

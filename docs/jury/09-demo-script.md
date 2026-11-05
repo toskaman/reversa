@@ -6,8 +6,9 @@ no credential; 60 min TTL, fixed 2-workflow/2-execute quotas, each session in
 its own ephemeral demo org) and runs the Acme onboarding end to end as that
 guest. If the API has no public mint endpoint (older build), Settings → paste
 demo-owner token → Test connection first — Launch then mints the guest from it
-(owner-mint fallback). Note: beat 4 (chaos) always needs the owner token —
-guests get 403 on chaos injection.
+(owner-mint fallback). Since RC6, beat 4 (chaos) also works as guest —
+org-scoped injection only (cap 50/org, swept at expiry); the admin chaos
+matrix stays owner-only.
 
 1. **(0:00) Hook:** "AI agents do real work now. Who cleans up when step 6
    of 10 fails?" Show a half-onboarded customer across systems.
@@ -29,13 +30,10 @@ Fallbacks: one-click Launch also runs fully as guest via API+cURL
 (mint → intent → approve → execute → evidence, see README); screenshots in
 `.agents/smoke/`; video `docs/jury/demo.mp4` if the network drops.
 
-## Cycle 2 addendum (only after Cycle 2 merges — not in this build)
+## Cycle 2 block (live since RC5 — part of the demo)
 
-Beats 1–7 above are the whole live demo today. Once the Cycle 2
-contracts land (spec
-`docs/superpowers/specs/2026-11-05-cycle2-agentic-design.md`), this
-60-second agentic block slots in after beat 2 (Plan) — all live, no
-new credentials, each beat a fresh single intent (no dialogue state,
+This 60-second agentic block slots in after beat 2 (Plan) — all live,
+no new credentials, each beat a fresh single intent (no dialogue state,
 per the non-goals):
 
 8. **(3:00) Ambiguous → clarify:** Generate plan for "Do the thing"
@@ -49,8 +47,7 @@ per the non-goals):
     compensations) in Shadow Preview, then the same approve →
     execute → evidence loop.
 
-Do not demo beats 8–10 on this build: today ambiguity/off-scope
-surface as 422 `PLAN_REJECTED` (AI path) or the onboarding template
-with a warning (deterministic path), and only the 10-step
-onboarding template exists. Non-goals hold on stage: no multi-turn
-dialogue, no new connectors, no UI redesign.
+Gallery proofs: `gallery/agentic-clarify.png`, `gallery/agentic-refuse.png`,
+`gallery/agentic-escalation.png`, `gallery/agentic-offboarding.png`.
+Non-goals hold on stage: no multi-turn dialogue, no new connectors,
+no UI redesign.

@@ -66,8 +66,8 @@ then run the 30-second demo above.
 ## Tests & benchmarks
 
 ```bash
-python -m pytest reversa/apps/api/tests/ -q        # 363 passed, 2 honest skips (RC4 v0.2.0-rc.4)
-python reversa/tests/e2e/smoke_browser.py --token <tok>   # 9/9 in real Chromium
+python -m pytest reversa/apps/api/tests/ -q        # 689 passed, 2 honest skips (RC6 v0.2.0-rc.6)
+python reversa/tests/e2e/smoke_browser.py --token <tok>   # 10/10 in real Chromium (agentic + guest chaos)
 python reversa/tests/performance/bench.py --base <url> --token <tok>
 ```
 
@@ -86,7 +86,8 @@ Details: [docs/benchmarks/results.md](docs/benchmarks/results.md).
 ## Security & honest limits
 
 Tenant-isolated tokens, plan-hash-bound approvals (30-min TTL), chaos locked
-to the demo tenant, redacted secrets, bounded retries. No exactly-once claim
+to the demo tenant (guests may inject org-scoped chaos, cap 50/org),
+redacted secrets, bounded retries. No exactly-once claim
 on external systems; the hash chain detects tampering but is not absolute
 immutability alone. Demo systems are labeled as such.
 
@@ -94,7 +95,7 @@ immutability alone. Demo systems are labeled as such.
 
 - [Jury dossier](docs/jury/) — overview, compliance, architecture, proofs,
   AI, security, benchmarks, business case, demo script, verification.
-- [Demo video build](docs/jury/build_video.py) — 66 s from real captures.
+- [Demo video build](docs/jury/build_video.py) — 85 s narrated V2 from real captures (V1 66 s kept as fallback).
 - [LabLab texts](docs/jury/lablab-submission.md) · [Slides](docs/jury/slides.md)
 
 MIT — built originally for this hackathon.
