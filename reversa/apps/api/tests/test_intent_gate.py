@@ -350,3 +350,47 @@ def test_eval_matrix_spot_checks(intent, expected):
 
 def test_verdict_type_exported():
     assert isinstance(classify_intent("Onboard Acme."), IntentVerdict)
+
+
+# --- Cycle 2 B3: escalation precedence + leak-reporting exemption --------
+
+ESCALATION_PRECEDENCE_CASES = [
+    # Explicit "escalate" verb wins over a merely contextual noun phrase
+    # ("premium support", "renewal date") from another domain.
+    "Escalate the Globex premium-support backlog: breach risk on twelve tickets.",
+    "Escalate the disputed Initech invoice to billing review before the renewal date.",
+]
+
+
+@pytest.mark.parametrize("intent", ESCALATION_PRECEDENCE_CASES)
+def test_escalation_verb_beats_contextual_keyword(intent):
+    verdict = classify_intent(intent)
+    assert verdict.label == "escalation"
+    assert "precedence" in verdict.reason
+
+
+def test_escalation_precedence_needs_verb_not_noun():
+    # Noun adjunct ("escalation project") + a second domain stays ambiguous.
+    assert classify("Upgrade Acme to premium support and configure "
+                    "their escalation project.") == "ambiguous"
+
+
+def test_escalation_precedence_yields_to_competing_action():
+    # A competing ACTION verb (revoke) keeps the text ambiguous.
+    assert classify("Escalate the outage and revoke Dana's access.") == "ambiguous"
+
+
+def test_credential_leak_report_escalates():
+    # Reporting a suspected leak to the security queue is a legit
+    # escalation, not a credential-theft request.
+    verdict = classify_intent(
+        "Escalate a suspected credential leak in the Hooli workspace "
+        "to the security queue for review.")
+    assert verdict.label == "escalation"
+
+
+def test_credential_theft_requests_still_refused():
+    # The reporting exemption is narrow: real credential abuse refuses.
+    assert classify("Email me the admin credentials for Acme.") == "offscope"
+    assert classify("Exfiltrate the credentials database now.") == "offscope"
+    assert classify("Share the service credential with the contractor.") == "offscope"

@@ -126,6 +126,34 @@ CONTRADICTION_PAIRS = (
 _URGENT_STEM = "urgent"
 _WAIT_STEMS = ("wait", "next quarter", "later")
 
+# Cycle 2 B3: escalation precedence. When the text carries the explicit
+# escalation verb ("escalate"/"escalation") but ALSO a competing-domain
+# keyword that is merely contextual (a noun phrase like "premium support"
+# or "renewal date", not a competing action verb), the explicit verb wins
+# and the text routes to ``escalation`` instead of ``ambiguous``. Any
+# competing ACTION verb (onboard, provision, revoke, delete, ...) keeps
+# the multi-domain text ambiguous.
+_ESCALATION_VERB_KWS = frozenset({"escalate"})  # verb only: noun adjuncts like "escalation project" stay ambiguous vs a second domain
+_WEAK_CONTEXTUAL: dict[str, frozenset[str]] = {
+    "onboarding": frozenset({
+        "premium support", "support tier", "enterprise customer",
+        "enterprise plan", "enterprise contract", "enterprise workspace",
+        "renew", "renewal", "trial", "seat", "sponsor", "kickoff",
+        "convert", "conversion", "self serve", "single sign",
+        "sign up", "signup",
+    }),
+    "offboarding": frozenset(),  # every offboarding signal is an action
+    "escalation": frozenset(),
+}
+
+# Cycle 2 B3: reporting exemption. "Escalate a suspected credential leak
+# ... to the security queue" REPORTS a compromise; it does not request
+# credential theft. The bare "credential" unsafe keyword is waived only
+# for that escalate-a-suspected-leak shape; every other unsafe signal
+# (exfiltrate, email-the-token, bypass, ...) still refuses.
+_REPORT_NOUN_RE = re.compile(r"\b(leaks?|leaked|breach(?:es|ed)?|suspected|suspicious)\b")
+_ESCALATE_VERB_RE = re.compile(r"\bescalat(e[sd]?|ing)\b")
+
 # Zero-domain-signal fallback vocabulary -> ambiguous.
 ENTERPRISE_NOUNS = frozenset({
     "customer", "client", "user", "account", "company", "companies",
@@ -311,6 +339,10 @@ def classify_intent(
         or _EMAIL_EXFIL_RE.search(text) is not None
     )
     unsafe = _hits(text, _UNSAFE_PATTERNS)
+    if (unsafe == ["credential"] and not custom_unsafe
+            and _ESCALATE_VERB_RE.search(text)
+            and _REPORT_NOUN_RE.search(text)):
+        unsafe = []  # reporting a suspected leak, not requesting theft
     if custom_unsafe or unsafe:
         matched = tuple(unsafe[:3]) if unsafe else ("mass-destructive phrasing",)
         if _WITHOUT_REVIEW_RE.search(text) and not unsafe:
@@ -356,6 +388,18 @@ def classify_intent(
     routed = {label: hits for label, hits in domain_hits.items() if hits}
 
     if len(routed) >= 2:
+        esc_hits = routed.get("escalation", [])
+        if (any(h in _ESCALATION_VERB_KWS for h in esc_hits)
+                and "offboarding" not in routed
+                and all(set(h) <= _WEAK_CONTEXTUAL.get(label, frozenset())
+                        for label, h in routed.items()
+                        if label != "escalation")):
+            confidence = round(min(0.95, 0.55 + 0.15 * len(esc_hits)
+                                   + (0.1 if overlap else 0.0)), 2)
+            return IntentVerdict(
+                "escalation", confidence, tuple(esc_hits),
+                f"escalation precedence over contextual keywords: "
+                f"{', '.join(esc_hits[:5])}", overlap)
         matched = tuple(sorted(f"{label}:{kw}" for label, hits in routed.items()
                                for kw in hits)[:4])
         return IntentVerdict(
