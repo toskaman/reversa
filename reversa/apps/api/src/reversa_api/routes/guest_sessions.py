@@ -4,7 +4,7 @@
   quota-bound guest credential (rev_guest_*, TTL 60 min). Cycle 4: each
   session owns an ephemeral demo org (per-session isolation).
 - POST /api/v1/demo/guest-sessions/public: PUBLIC mint, no credential.
-  Fixed tiny quotas, chaos-disabled, per-IP rate-limited (cycle 4).
+  Fixed tiny quotas, chaos allowed within the own demo org only, per-IP rate-limited (cycle 4).
 - GET/POST /api/v1/demo/tokens, DELETE /api/v1/demo/tokens/{name}:
   rotation overlap (add-new-then-revoke-old) for the demo credential.
 
@@ -176,7 +176,7 @@ def create_public_guest_session(request: Request,
     """PUBLIC guest mint: no credential required.
 
     Fixed tiny quotas (PUBLIC_GUEST_MAX_*, caller cannot override — any
-    body field is a 422), chaos-disabled (guest-actor middleware deny),
+    body field is a 422), chaos allowed own-org only (org-scoped rules + per-org cap),
     per-IP rate-limited (429 + Retry-After). Each session owns an
     ephemeral demo org, swept on expiry.
     """

@@ -237,26 +237,43 @@ def test_08_resources_isolated(client, demo_auth):
     assert r.json()["resources"] == []
 
 
-def test_09_chaos_disabled_for_guests(client, demo_auth):
+def test_09_chaos_isolated_between_guests(client, demo_auth):
     _, _, ga, gb = _mint_ab(client, demo_auth)
     payload = {"target_connector": "demo-billing", "fault": "http500"}
-    for g in (ga, gb):
-        assert client.post("/api/v1/demo/chaos", json=payload,
-                           headers=g["headers"]).status_code == 403
-        assert client.get("/api/v1/demo/chaos",
-                          headers=g["headers"]).status_code == 403
-        assert client.delete("/api/v1/demo/chaos/1",
-                             headers=g["headers"]).status_code == 403
-    # Owner chaos still works and stays invisible to guests (403 pre-list).
+    ra = client.post("/api/v1/demo/chaos", json=payload,
+                     headers=ga["headers"])
+    assert ra.status_code == 201, ra.text
+    rule_a = ra.json()["id"]
+    rb = client.post("/api/v1/demo/chaos", json=payload,
+                     headers=gb["headers"])
+    assert rb.status_code == 201, rb.text
+    rule_b = rb.json()["id"]
+    # Each guest lists exactly its own rule.
+    la = client.get("/api/v1/demo/chaos", headers=ga["headers"])
+    assert [row["id"] for row in la.json()["data"]] == [rule_a]
+    lb = client.get("/api/v1/demo/chaos", headers=gb["headers"])
+    assert [row["id"] for row in lb.json()["data"]] == [rule_b]
+    # Cross-guest delete is a 404 (no existence oracle, no effect).
+    assert client.delete(f"/api/v1/demo/chaos/{rule_a}",
+                         headers=gb["headers"]).status_code == 404
+    assert client.delete(f"/api/v1/demo/chaos/{rule_b}",
+                         headers=ga["headers"]).status_code == 404
+    # Owner rules stay invisible to guests (org-scoped list).
     r = client.post("/api/v1/demo/chaos", json=payload,
                     headers=demo_auth["headers"])
     assert r.status_code == 201, r.text
-    rule_id = r.json()["id"]
-    assert client.get("/api/v1/demo/chaos",
-                      headers=ga["headers"]).status_code == 403
-    r = client.delete(f"/api/v1/demo/chaos/{rule_id}",
-                      headers=demo_auth["headers"])
-    assert r.status_code == 200
+    rule_owner = r.json()["id"]
+    la = client.get("/api/v1/demo/chaos", headers=ga["headers"])
+    assert [row["id"] for row in la.json()["data"]] == [rule_a]
+    assert client.delete(f"/api/v1/demo/chaos/{rule_owner}",
+                         headers=ga["headers"]).status_code == 404
+    # Cleanup: everyone deletes their own.
+    assert client.delete(f"/api/v1/demo/chaos/{rule_a}",
+                         headers=ga["headers"]).status_code == 200
+    assert client.delete(f"/api/v1/demo/chaos/{rule_b}",
+                         headers=gb["headers"]).status_code == 200
+    assert client.delete(f"/api/v1/demo/chaos/{rule_owner}",
+                         headers=demo_auth["headers"]).status_code == 200
 
 
 def test_10_expiry_is_per_session(client, demo_auth):
@@ -392,10 +409,11 @@ def test_public_guest_flow_quota_and_chaos(client, demo_auth):
                     headers=g["headers"])
     assert r.status_code == 410
     assert r.json()["code"] == "QUOTA_EXHAUSTED"
-    # Chaos disabled for public guests.
+    # Chaos allowed for public guests (own ephemeral org only).
     payload = {"target_connector": "demo-billing", "fault": "http500"}
-    assert client.post("/api/v1/demo/chaos", json=payload,
-                       headers=g["headers"]).status_code == 403
+    r = client.post("/api/v1/demo/chaos", json=payload,
+                    headers=g["headers"])
+    assert r.status_code == 201, r.text
     # Invisible vs an owner-minted session and vice versa.
     owner_guest = _auth(_mint(client, demo_auth))
     assert client.get("/api/v1/workflows",

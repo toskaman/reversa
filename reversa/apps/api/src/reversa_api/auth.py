@@ -389,8 +389,9 @@ def mint_guest_session(owner: OrgCtx, *, max_workflows: int = GUEST_DEFAULT_MAX_
 def mint_public_guest_session() -> dict:
     """Mint a PUBLIC guest session: no owner credential, fixed tiny quotas.
 
-    Chaos is disabled for the session by the guest-actor middleware deny
-    (same as owner-minted guests); quotas cannot be raised by the caller.
+    Chaos injection is allowed within the session's own ephemeral demo
+    org (org-scoped rules, per-org cap, swept at expiry); quotas cannot
+    be raised by the caller.
     Rate limiting is enforced by the route (per-IP fixed window).
     """
     return _store_guest_session(
@@ -524,7 +525,6 @@ def revoke_owner_token(org_slug: str, name: str, *, current_hash: str) -> dict:
 
 _EXECUTE_RE = re.compile(r"^/api/v1/workflows/\d+/execute$")
 _INTENT_PATH = "/api/v1/intents"
-_CHAOS_PREFIX = "/api/v1/demo/chaos"
 
 
 def _error_body(code: str, message: str, retryable: bool) -> dict:
@@ -533,7 +533,14 @@ def _error_body(code: str, message: str, retryable: bool) -> dict:
 
 
 class GuestSessionMiddleware:
-    """ASGI middleware: guest-session restrictions (chaos deny, quotas)."""
+    """ASGI middleware: guest-session restrictions (quotas).
+
+    Chaos injection is NOT denied here: rules are org-scoped
+    (ChaosRule.org_id, matched per-org by the saga), times-bounded,
+    per-org capped, and swept at session expiry, so a guest can only
+    fault its own ephemeral demo tenant. The route guard still
+    requires a demo org (403 otherwise).
+    """
 
     def __init__(self, app):
         self.app = app
@@ -545,8 +552,7 @@ class GuestSessionMiddleware:
         method = scope.get("method", "")
         path = scope.get("path", "")
         watched = (
-            path.startswith(_CHAOS_PREFIX)
-            or (method == "POST" and path == _INTENT_PATH)
+            (method == "POST" and path == _INTENT_PATH)
             or (method == "POST" and _EXECUTE_RE.match(path or ""))
         )
         if not watched:
@@ -567,14 +573,6 @@ class GuestSessionMiddleware:
             await self.app(scope, receive, send)
             return
         actor = f"guest:{guest['session_id']}"
-        if path.startswith(_CHAOS_PREFIX):
-            resp = JSONResponse(
-                status_code=403,
-                content=_error_body("FORBIDDEN",
-                                    "guest sessions cannot use chaos injection",
-                                    False))
-            await resp(scope, receive, send)
-            return
         # V4-1: hold the per-session lock across quota check AND the
         # downstream route, so racing requests cannot all pass the check
         # before any of them lands. Other sessions proceed concurrently.

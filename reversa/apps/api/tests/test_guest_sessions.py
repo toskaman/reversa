@@ -97,14 +97,24 @@ def test_guest_execute_quota(client, demo_auth):
     assert r.json()["code"] == "QUOTA_EXHAUSTED"
 
 
-def test_guest_chaos_denied(client, demo_auth):
+def test_guest_chaos_allowed_own_org(client, demo_auth):
+    """Guests may inject chaos: rules are org-scoped (saga matches
+    ChaosRule.org_id), times-bounded (<=10), and swept at session expiry,
+    so a guest can only fault its own ephemeral demo tenant."""
     guest = _guest_auth(_mint(client, demo_auth))
     payload = {"target_connector": "demo-billing", "fault": "http500"}
     r = client.post("/api/v1/demo/chaos", json=payload,
                     headers=guest["headers"])
-    assert r.status_code == 403
+    assert r.status_code == 201, r.text
+    rule_id = r.json()["id"]
     r = client.get("/api/v1/demo/chaos", headers=guest["headers"])
-    assert r.status_code == 403
+    assert r.status_code == 200, r.text
+    assert [row["id"] for row in r.json()["data"]] == [rule_id]
+    r = client.delete(f"/api/v1/demo/chaos/{rule_id}",
+                      headers=guest["headers"])
+    assert r.status_code == 200, r.text
+    r = client.get("/api/v1/demo/chaos", headers=guest["headers"])
+    assert r.json()["data"] == []
     # Owner sanity: chaos still allowed for the demo owner.
     r = client.post("/api/v1/demo/chaos", json=payload,
                     headers=demo_auth["headers"])
@@ -372,16 +382,24 @@ def test_v41_concurrent_intents_admit_exactly_quota(client, demo_auth):
     assert set(results) <= {201, 410}, results
 
 
-def test_guest_chaos_403_carries_cors_headers(client, demo_auth):
-    """Middleware 403s must carry ACAO headers: without them the browser
-    reports a CORS failure and hides the real FORBIDDEN error."""
-    guest = _guest_auth(_mint(client, demo_auth))
-    headers = {**guest["headers"], "Origin": "http://localhost:3000"}
-    r = client.post("/api/v1/demo/chaos",
-                    json={"target_connector": "demo-billing",
-                          "fault": "http500", "times": 1},
+def test_guest_quota_410_carries_cors_headers(client, demo_auth):
+    """Middleware-generated errors must carry ACAO headers: without them the
+    browser reports a CORS failure and hides the real error. Exercises the
+    quota-exhausted 410 (public guests get exactly 2 intents)."""
+    r = client.post("/api/v1/demo/guest-sessions/public", json={})
+    assert r.status_code == 201, r.text
+    cred = r.json()["credential"]
+    headers = {"Authorization": f"Bearer {cred}",
+               "Origin": "http://localhost:3000"}
+    for _ in range(2):
+        r = client.post("/api/v1/intents",
+                        json={"intent": INTENT, "use_ai": False},
+                        headers=headers)
+        assert r.status_code == 201, r.text
+    r = client.post("/api/v1/intents",
+                    json={"intent": INTENT, "use_ai": False},
                     headers=headers)
-    assert r.status_code == 403, r.text
+    assert r.status_code == 410, r.text
     assert r.headers.get("access-control-allow-origin") == \
         "http://localhost:3000", dict(r.headers)
 

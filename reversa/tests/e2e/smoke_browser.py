@@ -44,17 +44,38 @@ def main() -> int:
         page.goto(f"{args.web}/settings")
         page.get_by_role("button", name="Test connection").click()
         try:
-            page.wait_for_selector("text=acme-demo", timeout=15000)
+            page.wait_for_selector("text=Connection OK", timeout=15000)
             check("settings-connection", True)
         except Exception as e:
             check("settings-connection", False, str(e)[:120])
         page.screenshot(path=f"{args.shots}/settings.png")
 
-        # Command: plan -> approve -> execute -> COMPLETED.
+        # Command: agentic clarify contract first (Cycle 2), then a
+        # deterministic plan -> approve -> execute -> COMPLETED.
         page.goto(f"{args.web}/command")
         page.get_by_role("button", name="Generate plan").click()
+        clarified = False
         try:
-            page.wait_for_selector("text=Plan —", timeout=30000)
+            page.wait_for_selector("text=NEEDS CLARIFICATION", timeout=45000)
+            check("command-clarify-shown", True)
+            clarified = True
+        except Exception:
+            pass  # model may plan the default intent directly; accept that
+        page.screenshot(path=f"{args.shots}/command-clarify.png")
+        if clarified:
+            try:
+                page.get_by_role("button", name="Dismiss").click()
+            except Exception:
+                pass
+            try:
+                page.get_by_role("checkbox").uncheck()
+            except Exception as e:
+                check("command-plan", False, f"uncheck-ai: {e}"[:120])
+                clarified = False
+            else:
+                page.get_by_role("button", name="Generate plan").click()
+        try:
+            page.wait_for_selector("text=Plan —", timeout=45000)
             check("command-plan", True)
         except Exception as e:
             check("command-plan", False, str(e)[:120])
@@ -67,9 +88,16 @@ def main() -> int:
         except Exception as e:
             check("command-execute-completed", False, str(e)[:160])
         page.screenshot(path=f"{args.shots}/command-done.png")
-        href = page.get_attribute("a:has-text('Open workflow')", "href") or ""
-        wf_id = href.rsplit("/", 1)[-1] if "/" in href else ""
-        check("workflow-link", wf_id.isdigit(), href)
+        try:
+            href = page.get_attribute("a:has-text('Open workflow')", "href") or ""
+        except Exception as e:
+            href = ""
+            check("workflow-link", False, f"no open-workflow link: {e}"[:120])
+        else:
+            wf_id = href.rsplit("/", 1)[-1] if "/" in href else ""
+            check("workflow-link", wf_id.isdigit(), href)
+        if not href:
+            wf_id = ""
 
         # Workflow detail: graph + timeline + preview.
         if wf_id.isdigit():

@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from fastapi import APIRouter, Depends, HTTPException
-from sqlalchemy import select
+from sqlalchemy import func, select
 
 from ..auth import OrgCtx, get_current_org, get_session
 from ..config import settings
@@ -20,10 +20,24 @@ def _guard(org: OrgCtx) -> None:
                             detail="chaos injection is restricted to the demo tenant")
 
 
+# Anti-spam: active (enabled, budget left) rules per org, guests and
+# owners alike. Rules are org-scoped and swept at guest-session expiry;
+# without a cap a guest could pile unbounded rows in its own org.
+MAX_ACTIVE_RULES_PER_ORG = 50
+
+
 @router.post("", status_code=201)
 def inject(body: ChaosIn, org: OrgCtx = Depends(get_current_org),
            session=Depends(get_session)):
     _guard(org)
+    active = session.scalar(
+        select(func.count()).select_from(ChaosRule).where(
+            ChaosRule.org_id == org.org_id,
+            ChaosRule.enabled == 1,
+            ChaosRule.times_remaining > 0)) or 0
+    if active >= MAX_ACTIVE_RULES_PER_ORG:
+        raise HTTPException(status_code=429,
+                            detail="too many active chaos rules for this org")
     if body.fault not in CHAOS_FAULTS and body.fault != "latency":
         raise HTTPException(status_code=422, detail=f"unknown fault {body.fault}")
     if body.target_connector not in REGISTRY:

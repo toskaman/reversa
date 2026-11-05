@@ -837,3 +837,24 @@ def test_cm18_compensated_replay_is_idempotent(client, demo_auth):
     r = client.get(f"/api/v1/workflows/{wf_id}/evidence",
                    headers=demo_auth["headers"])
     assert r.json()["chain"]["valid"] is True
+
+
+def test_chaos_rule_per_org_cap(client, demo_auth, monkeypatch):
+    import reversa_api.routes.chaos as chaos_mod
+
+    monkeypatch.setattr(chaos_mod, 'MAX_ACTIVE_RULES_PER_ORG', 2)
+    h = demo_auth['headers']
+    payload = {'target_connector': 'demo-billing', 'fault': 'http500'}
+    ids = []
+    for _ in range(2):
+        r = client.post('/api/v1/demo/chaos', json=payload, headers=h)
+        assert r.status_code == 201, r.text
+        ids.append(r.json()['id'])
+    r = client.post('/api/v1/demo/chaos', json=payload, headers=h)
+    assert r.status_code == 429, r.text
+    assert 'too many active' in r.text
+    # Deleting frees budget: the count is live, not cumulative.
+    assert client.delete(f'/api/v1/demo/chaos/{ids[0]}', headers=h).status_code == 200
+    r = client.post('/api/v1/demo/chaos', json=payload, headers=h)
+    assert r.status_code == 201, r.text
+
