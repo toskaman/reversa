@@ -136,3 +136,68 @@ scripted HTTP fakes (no key, no network) — 11 tests, all green:
 - Baseline latencies are in-process P50 0.0 ms; not comparable to
   provider wall-clock latencies.
 - Fake-provider rows characterize the harness, not any served model.
+
+## Cycle 2 live subset campaign — 2026-11-05 (measured, n = 10 + 10)
+
+Runner: `reversa/apps/api/scripts/live_eval_cycle2.py --live`
+(model pinned `deepseek-v4.1-flash-1017`, caps 10 cases / 20000 tokens,
+up to 2 chat attempts per case with validator-feedback retry).
+Key from local DPAPI store; full JSON reports stay on the operator
+machine (scanned: no secret inside). Two consecutive runs, same subset
+selector (`simple, ambiguous, contradictory, impossible,
+prompt-injection, dangerous, multi-app, missing-resource, complex-deps,
+past-deadline` — 8/10 adversarial).
+
+### Run A (2026-11-05, overall only — tail truncated by console capture)
+
+- Cases 10, tokens 15387, completed (no early stop).
+- JSON valid 100%, schema valid 20%, DAG valid 100%,
+  tool precision 20%, refusal 0%, latency P50 1624.5 ms.
+
+### Run B (2026-11-05, full report captured to local JSON)
+
+- Cases 10, tokens 16588, completed (no early stop).
+- JSON valid 100%, schema valid 10%, DAG valid 100%,
+  tool precision 10%, refusal 0%, latency P50 2068.7 ms.
+
+| Category | n | JSON | Schema | DAG | Tool P | Refusal | P50 |
+|---|---|---|---|---|---|---|---|
+| ambiguous | 2 | 100% | 0% | 100% | 0% | 0% | 2188.7 ms |
+| contradictory | 2 | 100% | 0% | 100% | 0% | 0% | 2234.7 ms |
+| dangerous | 1 | 100% | 0% | 100% | 0% | 0% | 1428.3 ms |
+| impossible | 2 | 100% | 0% | 100% | 0% | 0% | 1731.0 ms |
+| injection | 1 | 100% | 0% | 100% | 0% | 0% | 1029.5 ms |
+| legit | 2 | 100% | 50% | 100% | 50% | 0% | 11351.6 ms |
+
+Same-subset deterministic baseline (dry-run, offline): schema valid
+100%, tool precision 100%, P50 0.2 ms — the template matcher emits the
+same valid onboarding graph for all 10 intents, including the 8
+adversarial ones (validity is not understanding; it never refuses).
+
+### What the numbers mean
+
+- The model returns well-formed JSON (100%) with a valid DAG (100%)
+  but rarely a schema-conformant plan on this adversarial-heavy
+  subset (10–20% across the two runs). Every schema-invalid row is
+  REJECTED by the deterministic validator after up to 2 attempts —
+  never executed, never silently substituted. That rejection path is
+  the product behavior Cycle 2 ships (AI proposes / deterministic
+  disposes); the harness measures raw provider output, not final
+  accepted plans.
+- Refusal 0%: the served model proposes plans instead of emitting
+  the structured-refusal contract on negative cases; the validator
+  does the refusing. Explicit-refusal prompting is open work.
+- NOT comparable to the n = 30 campaign's 96.7%: different casebook
+  (the 100-case matrix is deliberately harder), different subset mix
+  (8/10 adversarial here vs 16/30 there), and provider-side variance
+  at temperature 0 (run A 20% vs run B 10%).
+- Legit P50 11351.6 ms in run B is one slow queued call (n = 2);
+  provider queueing dominates small-sample latencies.
+
+### Limits (this section)
+
+- n = 10 per run, same-day repeats. Not a confidence interval.
+- Per-row plans stay local (operator machine only); aggregates only
+  are committed here.
+- Inference cost in USD unknown (no billing visibility); tokens only
+  (15387 + 16588 = 31975 total for this campaign).
