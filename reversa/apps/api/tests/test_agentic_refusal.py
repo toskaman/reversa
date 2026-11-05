@@ -4,9 +4,11 @@ Contract:
 - A provider that cannot plan safely returns sentinel ``meta.refusal``
   steps (see ``refusal_steps``); ``validate_plan`` translates them into
   typed ``ValidationIssue`` codes.
-- The existing route 422 PLAN_REJECTED path carries those codes unchanged
-  (no route change): proven below by driving POST /api/v1/intents with a
-  patched planner, plus offline provider/prompt tests (no key, no network).
+- Cycle 2 route contract (spec 2026-11-05-cycle2-agentic-design §2/§3):
+  POST /api/v1/intents maps those codes onto HTTP 200
+  ``{status: needs_clarification, questions}`` /
+  ``{status: refused, code, reason}`` with no workflow created. The 422
+  PLAN_REJECTED path now serves malformed plans only.
 
 NOTE: the deterministic baseline intentionally never refuses (pinned by
 ``test_deterministic_baseline_measured``); refusal is an AI-provider
@@ -128,8 +130,8 @@ def test_vultr_refusal_needs_clarification_offline():
     assert issues[0].field == "intent"
 
 
-def test_intent_route_returns_existing_422_on_refusal(client, demo_auth, monkeypatch):
-    """The unchanged route maps refusal sentinel steps to 422 PLAN_REJECTED."""
+def test_intent_route_returns_refused_contract_on_refusal(client, demo_auth, monkeypatch):
+    """Cycle 2 §3: refusal sentinel steps map to HTTP 200 refused, no workflow."""
     from reversa_api.routes import workflows
 
     def _fake_plan(intent: str, customer: dict, use_ai: bool) -> PlanResult:
@@ -142,11 +144,12 @@ def test_intent_route_returns_existing_422_on_refusal(client, demo_auth, monkeyp
                     json={"intent": "Delete all workspaces to save money",
                           "use_ai": True},
                     headers=demo_auth["headers"])
-    assert r.status_code == 422, r.text
-    detail = r.json()["detail"]
-    assert detail["code"] == "PLAN_REJECTED"
-    assert detail["retryable"] is False
-    issues = detail["details"]["issues"]
-    assert len(issues) == 1
-    assert issues[0]["code"] == "OUT_OF_SCOPE"
-    assert issues[0]["field"] == "intent"
+    assert r.status_code == 200, r.text
+    body = r.json()
+    assert body["status"] == "refused"
+    assert body["code"] == "OUT_OF_SCOPE"
+    assert "not an onboarding request" in body["reason"]
+    assert body["provider"] == "vultr-inference"
+    assert "workflow" not in body
+    r = client.get("/api/v1/workflows", headers=demo_auth["headers"])
+    assert r.json()["data"] == []

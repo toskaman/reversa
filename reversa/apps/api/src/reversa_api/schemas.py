@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from typing import Literal
+
 from pydantic import BaseModel, ConfigDict, Field
 
 
@@ -97,3 +99,26 @@ class ErrorOut(Strict):
     message: str
     details: dict = Field(default_factory=dict)
     retryable: bool = False
+
+
+# Cycle 2 clarify/refuse contracts (spec 2026-11-05-cycle2-agentic-design
+# §2/§3): POST /api/v1/intents answers HTTP 200 with exactly one of these
+# when no workflow is created. The accepted-plan shape (201, no `status`
+# key) is unchanged so the UI classifier keeps working. Codes mirror
+# REFUSAL_CODES in planner/validate.py minus NEEDS_CLARIFICATION (pinned
+# by test_intents_contracts.py::test_refusal_codes_mirror_validator).
+
+
+class ClarificationOut(Strict):
+    status: Literal["needs_clarification"] = "needs_clarification"
+    questions: list[str] = Field(min_length=1, max_length=3)
+    provider: str = "deterministic"
+    warnings: list[str] = Field(default_factory=list)
+
+
+class RefusalOut(Strict):
+    status: Literal["refused"] = "refused"
+    code: Literal["OUT_OF_SCOPE", "UNSAFE_REQUEST", "IMPOSSIBLE_REQUEST"]
+    reason: str = Field(min_length=1, max_length=500)
+    provider: str = "deterministic"
+    warnings: list[str] = Field(default_factory=list)

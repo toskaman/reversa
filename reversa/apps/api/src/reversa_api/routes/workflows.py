@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import datetime as dt
+import importlib
 import json
 import secrets
 import threading
@@ -10,7 +11,7 @@ import time
 import uuid
 
 from fastapi import APIRouter, Depends, HTTPException, Request
-from fastapi.responses import StreamingResponse
+from fastapi.responses import JSONResponse, StreamingResponse
 from sqlalchemy import func, select
 
 from ..auth import OrgCtx, get_current_org, get_session, resolve_org_from_token
@@ -26,10 +27,114 @@ from ..engine.saga import (
 from ..engine.states import InvalidTransition, check_workflow_transition
 from ..evidence import append_event
 from ..models import ActionRun, Approval, Event, Organization, Workflow, as_naive_utc, utcnow
-from ..planner import plan_from_intent, plan_hash, validate_plan
-from ..schemas import ActionOut, ApproveIn, EventOut, IntentIn, PreviewOut, WorkflowOut
+from ..planner import (
+    REFUSAL_CODES,
+    available_capabilities,
+    plan_from_intent,
+    plan_hash,
+    validate_plan,
+)
+from ..planner.validate import MAX_CLARIFICATION_QUESTIONS
+from ..schemas import (
+    ActionOut,
+    ApproveIn,
+    ClarificationOut,
+    EventOut,
+    IntentIn,
+    PreviewOut,
+    RefusalOut,
+    WorkflowOut,
+)
 
 router = APIRouter(prefix="/api/v1", tags=["workflows"])
+
+
+# Cycle 2 clarify/refuse contracts (spec §2/§3). Deterministic fallback
+# questions, one per missing slot (domain / subject / outcome); used only
+# when neither the gate evidence nor the provider supplied targeted ones.
+_FALLBACK_QUESTIONS = (
+    "Is this request about onboarding, offboarding, or an escalation?",
+    "Who is this request for (customer or employee name)?",
+    "What outcome should the workflow achieve?",
+)
+
+
+def _cycle2_gate_verdict(intent: str):
+    """Deterministic intent-gate verdict, or None when unavailable.
+
+    Soft import: planner/intent.py lands from a sibling branch. The
+    validator path in create_from_intent already serves clarify/refuse
+    without it, so the route never 500s on the import.
+    """
+    try:
+        module = importlib.import_module("reversa_api.planner.intent")
+    except ImportError:
+        return None
+    return module.classify_intent(intent, available_capabilities())
+
+
+def _questions_for_verdict(verdict) -> list[str]:
+    """Deterministic questions from gate evidence (spec §2, max 3)."""
+    reason = getattr(verdict, "reason", "") or ""
+    matched = list(getattr(verdict, "matched", ()) or ())
+    if "multiple domains" in reason:
+        domains = sorted({m.split(":", 1)[0] for m in matched if ":" in m})
+        if len(domains) >= 2:
+            return ["Your request spans " + ", ".join(domains) + ". "
+                    "Which one should I plan?"]
+    if "contradictory" in reason and matched:
+        return ["Your request has conflicting requirements "
+                f"({', '.join(matched[:2])}). Which should take priority?"]
+    if "capability inquiry" in reason:
+        return ["What would you like REVERSA to do: onboard a customer, "
+                "offboard one, or escalate an issue?"]
+    return list(_FALLBACK_QUESTIONS)
+
+
+def _refusal_for_gate_verdict(verdict) -> tuple[str, str]:
+    """Map a gate offscope verdict onto (REFUSAL_CODES code, reason).
+
+    Only the public verdict fields (reason prefix) drive the mapping, so
+    it survives keyword-list churn inside the gate. IMPOSSIBLE_REQUEST
+    arrives via the provider/validator path, not the gate.
+    """
+    reason = (getattr(verdict, "reason", "") or "").strip()
+    code = "UNSAFE_REQUEST" if reason.startswith("unsafe pattern") else "OUT_OF_SCOPE"
+    return code, (reason or code)[:500]
+
+
+def _sentinel_questions(steps) -> list[str]:
+    """Questions carried by a NEEDS_CLARIFICATION sentinel (validated)."""
+    if not isinstance(steps, list) or len(steps) != 1:
+        return []
+    first = steps[0]
+    inputs = first.get("inputs", {}) if isinstance(first, dict) else {}
+    raw = inputs.get("questions", [])
+    if not isinstance(raw, list):
+        return []
+    return [q.strip()[:300] for q in raw
+            if isinstance(q, str) and q.strip()][:MAX_CLARIFICATION_QUESTIONS]
+
+
+def _refusal_contract(issues, normalized, result):
+    """Map a lone validator refusal onto a 200 contract, else None.
+
+    Only a single NEEDS_CLARIFICATION / refusal issue with no usable
+    steps qualifies; mixed (refusal + steps) or malformed plans stay on
+    the 422 PLAN_REJECTED path. Never creates a workflow.
+    """
+    if normalized or len(issues) != 1 or issues[0].code not in REFUSAL_CODES:
+        return None
+    issue = issues[0]
+    if issue.code == "NEEDS_CLARIFICATION":
+        questions = (_sentinel_questions(result.steps)
+                     or list(_FALLBACK_QUESTIONS))[:MAX_CLARIFICATION_QUESTIONS]
+        body = ClarificationOut(questions=questions, provider=result.provider,
+                                warnings=result.warnings)
+    else:
+        body = RefusalOut(code=issue.code, reason=issue.message[:500],
+                          provider=result.provider, warnings=result.warnings)
+    return JSONResponse(status_code=200, content=body.model_dump())
 
 
 def _plan_steps(wf: Workflow) -> list[dict]:
@@ -77,9 +182,23 @@ def _set_state(session, wf: Workflow, new: str, actor: str, note: str = "") -> N
 @router.post("/intents", status_code=201)
 def create_from_intent(body: IntentIn, org: OrgCtx = Depends(get_current_org),
                        session=Depends(get_session)):
+    # Cycle 2 §2/§3: the deterministic gate short-circuits ambiguous and
+    # offscope intents before any planning; these paths create no workflow.
+    verdict = _cycle2_gate_verdict(body.intent)
+    if verdict is not None and verdict.label == "ambiguous":
+        clarify = ClarificationOut(
+            questions=_questions_for_verdict(verdict), provider="deterministic")
+        return JSONResponse(status_code=200, content=clarify.model_dump())
+    if verdict is not None and verdict.label == "offscope":
+        code, reason = _refusal_for_gate_verdict(verdict)
+        refused = RefusalOut(code=code, reason=reason, provider="deterministic")
+        return JSONResponse(status_code=200, content=refused.model_dump())
     result = plan_from_intent(body.intent, body.customer, body.use_ai)
     normalized, approval_required, issues = validate_plan({"steps": result.steps})
     if issues:
+        contract = _refusal_contract(issues, normalized, result)
+        if contract is not None:
+            return contract
         raise HTTPException(status_code=422, detail={
             "code": "PLAN_REJECTED", "type": "validation",
             "message": "planner output failed validation",
