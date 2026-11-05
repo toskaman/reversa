@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { api, apiBase, getToken } from "../lib/api";
+import { api, apiBase, ApiError } from "../lib/api";
 import type { Evt } from "../lib/types";
 
 export default function EventTimeline({ workflowId, refreshKey }: {
@@ -20,17 +20,22 @@ export default function EventTimeline({ workflowId, refreshKey }: {
 
   useEffect(() => () => { esRef.current?.close(); }, []);
 
-  function toggleLive() {
+  async function toggleLive() {
     if (esRef.current) {
       esRef.current.close();
       esRef.current = null;
       setLive(false);
       return;
     }
-    // EventSource cannot set headers; the demo token travels as query param.
-    // The API also accepts ?token= for SSE only. Fallback: poll.
-    const url = `${apiBase()}/api/v1/workflows/${workflowId}/events/stream?token=${getToken()}`;
+    // EventSource cannot set headers, so the long-lived API token must not
+    // travel as ?token=. Mint a short-lived single-use ticket over an
+    // authenticated call, then open the stream with ?ticket=.
+    setError("");
     try {
+      const { ticket } = await api<{ ticket: string; expires_in: number }>(
+        `/api/v1/workflows/${workflowId}/stream-ticket`, { method: "POST" });
+      const url = `${apiBase()}/api/v1/workflows/${workflowId}/events/stream` +
+        `?ticket=${encodeURIComponent(ticket)}`;
       const es = new EventSource(url);
       es.onmessage = (m) => {
         try {
@@ -45,8 +50,10 @@ export default function EventTimeline({ workflowId, refreshKey }: {
       };
       esRef.current = es;
       setLive(true);
-    } catch {
-      setError("EventSource unsupported here. Showing snapshot above.");
+    } catch (e) {
+      setError(e instanceof ApiError
+        ? `Live stream unavailable: ${e.message}. Showing snapshot above.`
+        : "Live stream unavailable (network or browser). Showing snapshot above.");
     }
   }
 

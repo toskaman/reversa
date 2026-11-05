@@ -1,0 +1,90 @@
+{
+  "scene": "S3 verified execution",
+  "local_only": true,
+  "workflow_id": 1,
+  "state": "COMPLETED",
+  "replay": false,
+  "terminal": true,
+  "actions": [
+    {
+      "seq": 1,
+      "action_type": "crm.validate_customer",
+      "connector_id": "demo-crm",
+      "state": "VERIFIED",
+      "attempt": 1
+    },
+    {
+      "seq": 2,
+      "action_type": "crm.create_organization",
+      "connector_id": "demo-crm",
+      "state": "VERIFIED",
+      "attempt": 1
+    },
+    {
+      "seq": 3,
+      "action_type": "identity.create_workspace",
+      "connector_id": "demo-identity",
+      "state": "VERIFIED",
+      "attempt": 1
+    },
+    {
+      "seq": 4,
+      "action_type": "identity.provision_users",
+      "connector_id": "demo-identity",
+      "state": "VERIFIED",
+      "attempt": 1
+    },
+    {
+      "seq": 5,
+      "action_type": "support.create_queue",
+      "connector_id": "demo-support",
+      "state": "VERIFIED",
+      "attempt": 1
+    },
+    {
+      "seq": 6,
+      "action_type": "billing.create_profile",
+      "connector_id": "demo-billing",
+      "state": "VERIFIED",
+      "attempt": 1
+    },
+    {
+      "seq": 7,
+      "action_type": "identity.assign_manager",
+      "connector_id": "demo-identity",
+      "state": "VERIFIED",
+      "attempt": 1
+    },
+    {
+      "seq": 8,
+      "action_type": "support.create_checklist",
+      "connector_id": "demo-support",
+      "state": "VERIFIED",
+      "attempt": 1
+    },
+    {
+      "seq": 9,
+      "action_type": "core.consistency_check",
+      "connector_id": "reversa-core",
+      "state": "VERIFIED",
+      "attempt": 1
+    },
+    {
+      "seq": 10,
+      "action_type": "notify.send_summary",
+      "connector_id": "demo-notify",
+      "state": "VERIFIED",
+      "attempt": 1
+    }
+  ],
+  "resources_active": {
+    "crm/organization/active": 1,
+    "identity/workspace/active": 1,
+    "identity/user/active": 4,
+    "support/queue/active": 1,
+    "billing/billing_profile/active": 1
+  },
+  "execute_latency_ms_local": 215.8,
+  "event_count": 59,
+  "note": "timing is local in-process wall time, not a benchmark claim"
+}

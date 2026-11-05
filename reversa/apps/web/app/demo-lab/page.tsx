@@ -40,8 +40,11 @@ export default function DemoLab() {
   }
 
   async function remove(id: number) {
-    await api(`/api/v1/demo/chaos/${id}`, { method: "DELETE" });
-    load();
+    setError(""); setNotice("");
+    try {
+      await api(`/api/v1/demo/chaos/${id}`, { method: "DELETE" });
+      load();
+    } catch (e) { setError(e instanceof ApiError ? e.message : String(e)); }
   }
 
   async function runChaosScenario() {
@@ -100,6 +103,7 @@ export default function DemoLab() {
         <div><button onClick={inject}>Inject</button></div>
       </div>
       <h2>Active rules ({rules.length})</h2>
+      <div className="table-wrap">
       <table><thead><tr><th>ID</th><th>Target</th><th>Fault</th><th>Left</th>
         <th /></tr></thead>
         <tbody>{rules.map((r) => (
@@ -109,6 +113,7 @@ export default function DemoLab() {
             <td><button className="ghost" onClick={() => remove(r.id)}>Delete</button></td>
           </tr>
         ))}</tbody></table>
+      </div>
     </div>
   );
 }

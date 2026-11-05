@@ -27,12 +27,26 @@ export default function Evidence({ params }: { params: Promise<{ id: string }> }
   }
 
   async function openHtml() {
-    const res = await fetch(
-      `${apiBase()}/api/v1/workflows/${id}/evidence?format=html`,
-      { headers: { Authorization: `Bearer ${getToken()}` } });
-    const html = await res.text();
-    const w = window.open("", "_blank");
-    w?.document.write(html);
+    setError("");
+    try {
+      const res = await fetch(
+        `${apiBase()}/api/v1/workflows/${id}/evidence?format=html`,
+        { headers: { Authorization: `Bearer ${getToken()}` } });
+      if (!res.ok) {
+        setError(`HTML report unavailable: ${res.status} ${res.statusText}.`);
+        return;
+      }
+      const html = await res.text();
+      const w = window.open("", "_blank");
+      if (!w) {
+        setError("Popup blocked — allow popups to open the HTML report.");
+        return;
+      }
+      w.document.write(html);
+      w.document.close();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+    }
   }
 
   if (!bundle) return <div><h1>Evidence #{id}</h1>
@@ -53,6 +67,7 @@ export default function Evidence({ params }: { params: Promise<{ id: string }> }
       <p className="muted">Verify offline: python -m reversa_api.cli verify
         reversa-evidence-{id}.json</p>
       <div className="card"><h2>Actions</h2>
+        <div className="table-wrap">
         <table><thead><tr><th>#</th><th>Action</th><th>State</th><th>Try</th>
           <th>Compensation</th></tr></thead>
           <tbody>{bundle.actions.map((a) => (
@@ -61,6 +76,7 @@ export default function Evidence({ params }: { params: Promise<{ id: string }> }
               <td>{a.attempt}/{a.max_attempts}</td>
               <td>{a.compensation_capability}</td></tr>
           ))}</tbody></table>
+        </div>
       </div>
       <div className="card"><h2>Timeline ({bundle.events.length} events)</h2>
         <div className="timeline">

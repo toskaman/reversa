@@ -1,0 +1,74 @@
+{
+  "scene": "S4 chaos",
+  "local_only": true,
+  "workflow_id": 2,
+  "chaos_rule": {
+    "id": 1,
+    "target_connector": "demo-billing",
+    "target_action": "",
+    "fault": "http500",
+    "times_remaining": 5
+  },
+  "state": "COMPENSATED",
+  "failed": [
+    {
+      "seq": 6,
+      "action_type": "billing.create_profile",
+      "state": "FAILED",
+      "error": "CHAOS_HTTP500: chaos: demo-billing/billing.create_profile 500"
+    }
+  ],
+  "blocked_skipped_seqs": [
+    9,
+    10
+  ],
+  "workflow_transitions": [
+    {
+      "from": "DRAFT",
+      "to": "PLANNED",
+      "note": "plan accepted"
+    },
+    {
+      "from": "PLANNED",
+      "to": "VALIDATED",
+      "note": "schema+policy+DAG valid"
+    },
+    {
+      "from": "VALIDATED",
+      "to": "AWAITING_APPROVAL",
+      "note": "sensitive steps present"
+    },
+    {
+      "from": "AWAITING_APPROVAL",
+      "to": "READY",
+      "note": "approved by jury-capture"
+    },
+    {
+      "from": "READY",
+      "to": "RUNNING",
+      "note": "execution started"
+    },
+    {
+      "from": "RUNNING",
+      "to": "RETRYING",
+      "note": "retry scheduled"
+    },
+    {
+      "from": "RETRYING",
+      "to": "RUNNING",
+      "note": "forward progress"
+    },
+    {
+      "from": "RUNNING",
+      "to": "COMPENSATING",
+      "note": "seq 6 billing.create_profile: CHAOS_HTTP500: chaos: demo-billing/billing.create_profile 500"
+    },
+    {
+      "from": "COMPENSATING",
+      "to": "COMPENSATED",
+      "note": "all effects undone+verified"
+    }
+  ],
+  "execute_latency_ms_local": 1372.6,
+  "note": "timing is local in-process wall time, not a benchmark claim"
+}

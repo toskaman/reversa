@@ -1,0 +1,32 @@
+{
+  "scene": "S5 self-healing",
+  "local_only": true,
+  "workflow_id": 2,
+  "compensation_order": [
+    8,
+    7,
+    5,
+    4,
+    3,
+    2,
+    1
+  ],
+  "compensated_seqs": [
+    1,
+    2,
+    3,
+    4,
+    5,
+    7,
+    8
+  ],
+  "resources_after": {
+    "identity/workspace/any": 0,
+    "identity/user/archived": 4,
+    "identity/user/active": 0,
+    "crm/organization/archived": 1,
+    "billing/billing_profile/any": 0
+  },
+  "event_count": 81,
+  "chain_valid": true
+}

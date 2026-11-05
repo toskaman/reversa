@@ -1,0 +1,119 @@
+{
+  "scene": "S2 plan",
+  "local_only": true,
+  "workflow": {
+    "id": 1,
+    "state_after_plan": "AWAITING_APPROVAL",
+    "steps": 10,
+    "plan_hash": "3061d31579bccc4837f2ff89eabb799faf2f7c2b65a71b4ba46ee959b3bffd7a"
+  },
+  "approval_required": true,
+  "provider": "deterministic",
+  "preview": {
+    "plan_hash": "3061d31579bccc4837f2ff89eabb799faf2f7c2b65a71b4ba46ee959b3bffd7a",
+    "steps": 10,
+    "effects": [
+      {
+        "connector_id": "demo-crm",
+        "effects": [
+          "validated_customer"
+        ],
+        "compensation_capability": "COMPENSATABLE",
+        "approval_policy": "AUTO_ALLOWED",
+        "risk_level": "low"
+      },
+      {
+        "connector_id": "demo-crm",
+        "effects": [
+          "+crm organization"
+        ],
+        "compensation_capability": "COMPENSATABLE",
+        "approval_policy": "AUTO_ALLOWED",
+        "risk_level": "medium"
+      },
+      {
+        "connector_id": "demo-identity",
+        "effects": [
+          "+identity workspace"
+        ],
+        "compensation_capability": "FULLY_REVERSIBLE",
+        "approval_policy": "AUTO_ALLOWED",
+        "risk_level": "medium"
+      },
+      {
+        "connector_id": "demo-identity",
+        "effects": [
+          "+identity users"
+        ],
+        "compensation_capability": "COMPENSATABLE",
+        "approval_policy": "AUTO_ALLOWED",
+        "risk_level": "medium"
+      },
+      {
+        "connector_id": "demo-support",
+        "effects": [
+          "+support queue"
+        ],
+        "compensation_capability": "COMPENSATABLE",
+        "approval_policy": "AUTO_ALLOWED",
+        "risk_level": "low"
+      },
+      {
+        "connector_id": "demo-billing",
+        "effects": [
+          "+billing profile (no real charge)"
+        ],
+        "compensation_capability": "CONDITIONALLY_REVERSIBLE",
+        "approval_policy": "APPROVAL_REQUIRED",
+        "risk_level": "high"
+      },
+      {
+        "connector_id": "demo-identity",
+        "effects": [
+          "workspace.manager set"
+        ],
+        "compensation_capability": "FULLY_REVERSIBLE",
+        "approval_policy": "AUTO_ALLOWED",
+        "risk_level": "low"
+      },
+      {
+        "connector_id": "demo-support",
+        "effects": [
+          "+onboarding checklist"
+        ],
+        "compensation_capability": "COMPENSATABLE",
+        "approval_policy": "AUTO_ALLOWED",
+        "risk_level": "low"
+      },
+      {
+        "connector_id": "reversa-core",
+        "effects": [
+          "cross-system consistency verdict"
+        ],
+        "compensation_capability": "COMPENSATABLE",
+        "approval_policy": "AUTO_ALLOWED",
+        "risk_level": "low"
+      },
+      {
+        "connector_id": "demo-notify",
+        "effects": [
+          "+notification sent (cannot be unsent)"
+        ],
+        "compensation_capability": "IRREVERSIBLE",
+        "approval_policy": "AUTO_ALLOWED",
+        "risk_level": "medium"
+      }
+    ],
+    "approvals_required": true,
+    "irreversible": [
+      "notify.send_summary"
+    ],
+    "limits": [
+      "Declared effects, not a dry-run: demo connectors have no dry-run mode.",
+      "Conditional rollback: billing cancel refused once invoiced.",
+      "Notifications cannot be unsent."
+    ]
+  },
+  "plan_latency_ms_local": 30.2,
+  "note": "timing is local in-process wall time, not a benchmark claim"
+}

@@ -1,0 +1,75 @@
+{
+  "scene": "S1 hook",
+  "local_only": true,
+  "workflow_id": 2,
+  "on_screen_text": "Step 6 of 10 failed. Now what?",
+  "failed_step": {
+    "seq": 6,
+    "action_type": "billing.create_profile",
+    "connector_id": "demo-billing",
+    "state": "FAILED",
+    "error": "CHAOS_HTTP500: chaos: demo-billing/billing.create_profile 500"
+  },
+  "detection_events": [
+    {
+      "seq": 35,
+      "ts": "2026-11-05T15:27:14.256001",
+      "type": "chaos.injected",
+      "actor": "worker-1",
+      "payload": {
+        "seq": 6,
+        "connector": "demo-billing",
+        "action_type": "billing.create_profile",
+        "fault": "http500"
+      },
+      "prev_hash": "a66b716b1161ccf3c9a2c544c120363c7290e2f5ace90bcad92065cd68762390",
+      "hash": "935aa71f4991edbe70a73aebdf4ae4be78c6a5850e1e692cccc77f8b64c2331a"
+    },
+    {
+      "seq": 54,
+      "ts": "2026-11-05T15:27:15.422434",
+      "type": "chaos.injected",
+      "actor": "worker-1",
+      "payload": {
+        "seq": 6,
+        "connector": "demo-billing",
+        "action_type": "billing.create_profile",
+        "fault": "http500"
+      },
+      "prev_hash": "ec9e7e06d64c6e59b73d012fbe6cb79b370cf61acd2f4f4637fdff249ab601d7",
+      "hash": "66c185e29c510f23d5a166a41b3f67c0e56d05cf75d75227847bd37052101c2e"
+    }
+  ],
+  "first_failure_events": [
+    {
+      "seq": 36,
+      "ts": "2026-11-05T15:27:14.256872",
+      "type": "action.state",
+      "actor": "worker-1",
+      "payload": {
+        "seq": 6,
+        "action_type": "billing.create_profile",
+        "from": "EXECUTING",
+        "to": "FAILED",
+        "note": "CHAOS_HTTP500: chaos: demo-billing/billing.create_profile 500"
+      },
+      "prev_hash": "935aa71f4991edbe70a73aebdf4ae4be78c6a5850e1e692cccc77f8b64c2331a",
+      "hash": "de4b2a83e88d9dd85fba04724bffdb5fa3515bb6b62f987f4122c10b08c7880f"
+    },
+    {
+      "seq": 55,
+      "ts": "2026-11-05T15:27:15.423496",
+      "type": "action.state",
+      "actor": "worker-1",
+      "payload": {
+        "seq": 6,
+        "action_type": "billing.create_profile",
+        "from": "EXECUTING",
+        "to": "FAILED",
+        "note": "CHAOS_HTTP500: chaos: demo-billing/billing.create_profile 500"
+      },
+      "prev_hash": "66c185e29c510f23d5a166a41b3f67c0e56d05cf75d75227847bd37052101c2e",
+      "hash": "341619451793eb701683948ee761eee81965d65683f4d606506f06eb3d58da3c"
+    }
+  ]
+}

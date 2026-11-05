@@ -47,6 +47,7 @@ export default function Connectors() {
         ))}
       </div>
       <h2>Capabilities ({caps.length})</h2>
+      <div className="table-wrap">
       <table><thead><tr><th>Action</th><th>Connector</th><th>Compensation</th>
         <th>Policy</th><th>Risk</th></tr></thead>
         <tbody>{caps.map((c) => (
@@ -54,6 +55,7 @@ export default function Connectors() {
             <td>{c.connector_id}</td><td>{c.compensation_capability}</td>
             <td>{c.approval_policy}</td><td>{c.risk_level}</td></tr>
         ))}</tbody></table>
+      </div>
       {detail && (
         <div className="card"><h2>{detail.id}</h2>
           <pre>{JSON.stringify(detail.body, null, 2).slice(0, 4000)}</pre>

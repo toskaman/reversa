@@ -1,0 +1,5 @@
+# CLI verify (local captures, offline)
+# rc happy=0 chaos=0 strict-happy=0
+VALID: offline chain valid (59 events recomputed)
+VALID: offline chain valid (81 events recomputed)
+VALID: strict chain complete (59 events recomputed, anchors match; note: event `ts` timestamps are exported but NOT covered by the hash chain; ts edits are undetectable offline)

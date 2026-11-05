@@ -18,3 +18,9 @@ test suite (`pytest reversa/apps/api/tests`, `smoke_browser.py`).
    VERIFYING/COMPENSATING rows to safe states (tested at unit + boot).
 7. **Real evidence:** 59-event chain per happy run, SHA-256 linked, verified
    by API and offline CLI (`python -m reversa_api.cli verify`).
+   Verifier semantics: VALID means prefix-consistency (exported events 1..N
+   hash-link back to GENESIS with no gaps or mismatches). It does not rule
+   out trailing truncation (events after N removed pre-export still verify
+   VALID), and exported `ts` timestamps are not hash-covered. Strict mode
+   (`verify --strict --expect-count N --expect-head <hash>`) fails closed
+   without caller-supplied anchors and checks them when given.

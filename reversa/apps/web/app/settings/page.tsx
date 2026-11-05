@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { api, apiBase, ApiError } from "../../lib/api";
+import { ApiError } from "../../lib/api";
 
 export default function Settings() {
   const [token, setToken] = useState("");
@@ -27,13 +27,37 @@ export default function Settings() {
 
   async function test() {
     setError(""); setNotice(""); setMe(null);
+    // Test the values currently in the form (not the saved ones), so the
+    // user can verify before saving.
+    const base = (apiUrl.trim() ||
+      process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000")
+      .replace(/\/$/, "");
+    const tok = token.trim();
+    async function probe<T>(path: string): Promise<T> {
+      const res = await fetch(`${base}${path}`, { headers: {
+        "Content-Type": "application/json",
+        ...(tok ? { Authorization: `Bearer ${tok}` } : {}),
+      } });
+      if (!res.ok) {
+        let detail = res.statusText;
+        try {
+          const body = await res.json();
+          detail = typeof body.detail === "string"
+            ? body.detail : JSON.stringify(body.detail);
+        } catch { /* keep status text */ }
+        throw new ApiError(res.status, `${res.status}: ${detail}`);
+      }
+      return res.json() as Promise<T>;
+    }
     try {
-      const h = await api<{ status: string; version: string; db: boolean }>(
+      const h = await probe<{ status: string; version: string; db: boolean }>(
         "/api/v1/health");
-      setHealth(`API ${h.status} (v${h.version}, db=${h.db}) at ${apiBase()}`);
-      const m = await api<{ org_slug: string; is_demo: boolean; actor: string }>(
-        "/api/v1/me");
+      setHealth(`API ${h.status} (v${h.version}, db=${h.db}) at ${base}`);
+      const m = await probe<{ org_slug: string; is_demo: boolean;
+        actor: string }>("/api/v1/me");
       setMe(m);
+      setNotice("Connection OK with the values in this form. " +
+        "Save to use them everywhere.");
     } catch (e) { setError(e instanceof ApiError ? e.message : String(e)); }
   }
 

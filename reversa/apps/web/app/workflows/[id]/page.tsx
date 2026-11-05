@@ -89,6 +89,7 @@ export default function WorkflowDetail({ params }: { params: Promise<{ id: strin
           <EventTimeline workflowId={wf.id} refreshKey={tick} /></div>
       </div>
       <div className="card"><h2>Actions</h2>
+        <div className="table-wrap">
         <table><thead><tr><th>#</th><th>Action</th><th>Connector</th><th>State</th>
           <th>Try</th><th>Compensation</th><th>Error</th></tr></thead>
           <tbody>{actions.map((a) => (
@@ -98,11 +99,13 @@ export default function WorkflowDetail({ params }: { params: Promise<{ id: strin
               <td>{a.compensation_capability}</td>
               <td className="muted">{a.error.slice(0, 120)}</td></tr>
           ))}</tbody></table>
+        </div>
       </div>
       {preview && (
         <div className="card"><h2>Shadow preview</h2>
           <p className="muted">Declared effects (not a dry-run) ·
             approvals: {preview.approvals_required ? "required" : "none"}</p>
+          <div className="table-wrap">
           <table><thead><tr><th>Connector</th><th>Effects</th><th>Compensation</th>
             <th>Policy</th><th>Risk</th></tr></thead>
             <tbody>{preview.effects.map((e, i) => (
@@ -110,6 +113,7 @@ export default function WorkflowDetail({ params }: { params: Promise<{ id: strin
                 <td>{e.compensation_capability}</td><td>{e.approval_policy}</td>
                 <td>{e.risk_level}</td></tr>
             ))}</tbody></table>
+          </div>
           {preview.irreversible.length > 0 && (
             <p>Irreversible: {preview.irreversible.map((s) => <code key={s}>{s} </code>)}</p>)}
           {preview.limits.map((l, i) => <p key={i} className="muted">⚠ {l}</p>)}

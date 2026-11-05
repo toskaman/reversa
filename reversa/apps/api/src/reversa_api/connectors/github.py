@@ -1,21 +1,38 @@
-"""GitHub test-repo connector skeleton (AGENT-05, REVERSA V2 cycle 1).
+"""GitHub test-repo connector (AGENT-05, REVERSA V2 cycle 2).
 
 Real GitHub REST connector for a dedicated test repository: create, label,
 update and close issues. verify() re-reads the issue; compensate() closes
 issues or removes labels it added.
 
+Repo allowlist (deny-by-default): every action requires ``inputs["repo"]``
+to be a member of the allowlist (``REVERSA_GITHUB_ALLOWED_REPOS``, a
+comma-separated ``owner/name`` list; a lone ``REVERSA_GITHUB_TEST_REPO``
+counts as a single-entry allowlist). Anything else is refused with
+``GITHUB_REPO_NOT_ALLOWED`` before any network use. Comparison is
+case-insensitive; an empty allowlist allows nothing.
+
+Registration decision: ``registration_decision()`` reports whether the
+connector may join the registry — only when a token AND a non-empty
+allowlist are both configured. Otherwise the connector stays absent with
+an honest reason, and ``register_github()`` raises
+``GITHUB_NOT_CONFIGURED`` instead of registering.
+
 Honest limits (see docs/product/github-connector.md):
 - GitHub issues CANNOT be deleted via the API. Compensation closes the
   issue instead of removing it; the issue history remains visible.
-- Issue creation has no server-side idempotency key. execute() applies a
-  best-effort client-side guard: when ``idempotency_key`` is supplied it is
-  embedded as a body marker and open issues are scanned for it first.
+- The Issues API has NO server-side idempotency key
+  (``SUPPORTS_SERVER_IDEMPOTENCY`` is False): no ``Idempotency-Key``
+  header is sent (the server would ignore it). execute() applies a
+  best-effort client-side guard for create only: when
+  ``idempotency_key`` is supplied it is embedded as a body marker and
+  open issues are scanned for it first. Label-add, update and close are
+  naturally idempotent (safe to retry unchanged).
 - Token is read from the environment only
   (REVERSA_GITHUB_TOKEN, GITHUB_TOKEN, GH_TOKEN) and never logged, stored,
   or included in error messages.
 
-This module does NOT self-register: wiring into ``register_all()`` is a
-follow-up step so this skeleton stays reviewable in isolation.
+This module does NOT self-register: call ``register_github()``
+explicitly (it enforces the token+allowlist decision itself).
 """
 
 from __future__ import annotations
@@ -39,6 +56,14 @@ API_VERSION = "2022-11-28"
 SCHEMA_VERSION = "v1"
 
 TOKEN_ENV_VARS = ("REVERSA_GITHUB_TOKEN", "GITHUB_TOKEN", "GH_TOKEN")
+
+ALLOWED_REPOS_ENV_VAR = "REVERSA_GITHUB_ALLOWED_REPOS"
+TEST_REPO_ENV_VAR = "REVERSA_GITHUB_TEST_REPO"
+
+# Verified API fact: GitHub Issues REST has no server-side idempotency
+# key. We send no Idempotency-Key header (it would be silently ignored)
+# and say so in docs instead of faking the capability.
+SUPPORTS_SERVER_IDEMPOTENCY = False
 
 # Compensation copy shared by code and docs. Keep wording honest: close,
 # never "delete" or "undo".
@@ -70,25 +95,126 @@ def _redacted_error_details() -> str:
     )
 
 
+def resolve_allowed_repos() -> tuple[str, ...]:
+    """Return the configured repo allowlist (deny-by-default: may be empty).
+
+    Primary source is ``REVERSA_GITHUB_ALLOWED_REPOS`` (comma-separated
+    ``owner/name``). When it is unset/empty, a lone
+    ``REVERSA_GITHUB_TEST_REPO`` counts as a single-entry allowlist so
+    single-repo setups keep working. Entries are stripped and de-duplicated
+    (case-insensitive); repo names are config, not secrets.
+    """
+    raw = os.environ.get(ALLOWED_REPOS_ENV_VAR, "")
+    entries = [part.strip() for part in raw.split(",") if part.strip()]
+    if not entries:
+        single = os.environ.get(TEST_REPO_ENV_VAR, "").strip()
+        if single:
+            entries = [single]
+    seen: set[str] = set()
+    out: list[str] = []
+    for entry in entries:
+        key = entry.lower()
+        if key not in seen:
+            seen.add(key)
+            out.append(entry)
+    return tuple(out)
+
+
+def is_repo_allowed(repo: str,
+                    allowed: tuple[str, ...] | list[str] | None = None) -> bool:
+    """True iff ``repo`` is a member of the allowlist (case-insensitive)."""
+    if allowed is None:
+        allowed = resolve_allowed_repos()
+    needle = (repo or "").strip().lower()
+    if not needle:
+        return False
+    return any(needle == str(entry).strip().lower() for entry in allowed)
+
+
+def require_allowed_repo(repo: str,
+                         allowed: tuple[str, ...] | list[str] | None = None
+                         ) -> str:
+    """Return the normalized repo, or refuse with GITHUB_REPO_NOT_ALLOWED."""
+    normalized = (repo or "").strip()
+    effective = tuple(allowed) if allowed is not None else resolve_allowed_repos()
+    if not is_repo_allowed(normalized, effective):
+        current = ", ".join(effective) if effective else "(empty)"
+        raise ConnectorError(
+            "GITHUB_REPO_NOT_ALLOWED",
+            f"repo '{normalized or '(missing)'}' is not in the GitHub repo "
+            f"allowlist ({ALLOWED_REPOS_ENV_VAR}={current}); refusing before "
+            "any network use",
+            retryable=False)
+    return normalized
+
+
+def registration_decision() -> dict:
+    """Decide whether the connector may join the registry.
+
+    Registers ONLY when a token AND a non-empty allowlist are both
+    configured; otherwise the connector stays absent and ``reason``
+    says exactly what is missing. Never includes credential values.
+    """
+    token_configured = bool(resolve_token())
+    allowed = resolve_allowed_repos()
+    if token_configured and allowed:
+        return {
+            "register": True,
+            "reason": (f"token + allowlist configured "
+                       f"({len(allowed)} repo(s)); safe to register"),
+            "token_configured": True,
+            "allowed_repos": list(allowed),
+        }
+    if not token_configured and not allowed:
+        reason = (
+            "github connector absent: no token (set REVERSA_GITHUB_TOKEN, "
+            "GITHUB_TOKEN or GH_TOKEN) and no repo allowlist "
+            "(set REVERSA_GITHUB_ALLOWED_REPOS to a comma-separated "
+            "owner/name list)")
+    elif not token_configured:
+        reason = (
+            "github connector absent: no token configured; "
+            f"{_redacted_error_details()}")
+    else:
+        reason = (
+            "github connector absent: no repo allowlist; set "
+            "REVERSA_GITHUB_ALLOWED_REPOS to a comma-separated owner/name "
+            "list (or REVERSA_GITHUB_TEST_REPO for single-repo setups)")
+    return {
+        "register": False,
+        "reason": reason,
+        "token_configured": token_configured,
+        "allowed_repos": list(allowed),
+    }
+
+
 def marker_for(idempotency_key: str) -> str:
     return f"<!-- reversa:{idempotency_key} -->"
 
 
 class GithubConnector(Connector):
-    """Real GitHub Issues connector. Pass ``transport`` only in tests."""
+    """Real GitHub Issues connector.
+
+    Pass ``transport`` / ``allowed_repos`` only in tests: ``None`` (the
+    default) resolves the live environment on every call so production
+    always enforces the current env allowlist.
+    """
 
     id = CONNECTOR_ID
     store = ""  # no local store: GitHub is the system of record
 
-    def __init__(self, transport: httpx.BaseTransport | None = None):
+    def __init__(self, transport: httpx.BaseTransport | None = None,
+                 allowed_repos: tuple[str, ...] | list[str] | None = None):
         self._transport = transport
+        self._allowed_repos = (tuple(allowed_repos)
+                               if allowed_repos is not None else None)
         self.capabilities = {
             "github.create_issue": ActionContract(
                 action_type="github.create_issue",
                 schema_version=SCHEMA_VERSION,
                 connector_id=self.id,
                 input_schema={
-                    "repo": "string (owner/name)",
+                    "repo": "string (owner/name, must be allowlisted)",
                     "title": "string",
                     "body": "string?",
                     "labels": "list?",
@@ -111,7 +237,7 @@ class GithubConnector(Connector):
                 action_type="github.add_labels",
                 schema_version=SCHEMA_VERSION,
                 connector_id=self.id,
-                input_schema={"repo": "string (owner/name)",
+                input_schema={"repo": "string (owner/name, must be allowlisted)",
                               "issue_number": "int", "labels": "list"},
                 output_schema={"labels": "list"},
                 preconditions=("input_has:repo", "input_has:issue_number",
@@ -125,7 +251,7 @@ class GithubConnector(Connector):
                 action_type="github.update_issue",
                 schema_version=SCHEMA_VERSION,
                 connector_id=self.id,
-                input_schema={"repo": "string (owner/name)",
+                input_schema={"repo": "string (owner/name, must be allowlisted)",
                               "issue_number": "int", "title": "string?",
                               "body": "string?"},
                 output_schema={"issue_number": "int", "title": "string",
@@ -144,7 +270,7 @@ class GithubConnector(Connector):
                 action_type="github.close_issue",
                 schema_version=SCHEMA_VERSION,
                 connector_id=self.id,
-                input_schema={"repo": "string (owner/name)",
+                input_schema={"repo": "string (owner/name, must be allowlisted)",
                               "issue_number": "int",
                               "reason": "string? (completed|not_planned)"},
                 output_schema={"issue_number": "int", "state": "string"},
@@ -159,6 +285,10 @@ class GithubConnector(Connector):
         }
 
     # -- HTTP plumbing -----------------------------------------------------
+
+    def _allowed(self) -> tuple[str, ...] | None:
+        """Effective allowlist: test override or live env (None = env)."""
+        return self._allowed_repos
 
     def _client(self, token: str) -> httpx.Client:
         return httpx.Client(
@@ -221,6 +351,7 @@ class GithubConnector(Connector):
                 inputs: dict) -> dict:
         check_preconditions(ctx, action, inputs)
         token = self._require_token()
+        require_allowed_repo(str(inputs.get("repo", "")), self._allowed())
         with self._client(token) as client:
             if action.action_type == "github.create_issue":
                 return self._do_create(client, inputs)
@@ -236,21 +367,39 @@ class GithubConnector(Connector):
 
     def verify(self, ctx: dict, action: ActionContract, inputs: dict,
                output: dict) -> bool:
-        """Re-read the issue from GitHub and compare with expected state."""
-        try:
-            token = self._require_token()
-        except ConnectorError:
-            return False
-        repo = inputs.get("repo", "")
+        """Re-read the issue from GitHub and compare with expected state.
+
+        R1: False is returned ONLY when a clean read proves the expected
+        state is absent. Every error path (missing token, unreadable
+        refs, allowlist refusal, transport/API failure, unknown action)
+        raises ConnectorError so saga reconciliation reads INDETERMINATE
+        instead of mistaking an error for absence proof. The single
+        exception is a clean HTTP 404 on the issue read, which genuinely
+        proves the issue does not exist.
+        """
+        token = self._require_token()
+        repo = str(inputs.get("repo", "") or "")
         issue_number = (output.get("issue_number")
                         or inputs.get("issue_number"))
         if not repo or not issue_number:
-            return False
+            raise ConnectorError("GITHUB_VERIFY_UNVERIFIABLE",
+                                 "cannot verify: missing repo or issue_number ref",
+                                 retryable=False)
+        require_allowed_repo(repo, self._allowed())
+        try:
+            number = int(issue_number)
+        except (TypeError, ValueError):
+            raise ConnectorError("GITHUB_VERIFY_UNVERIFIABLE",
+                                 "cannot verify: issue_number "
+                                 f"{issue_number!r} is not an int",
+                                 retryable=False) from None
         try:
             with self._client(token) as client:
-                issue = self._get_issue(client, repo, int(issue_number))
-        except ConnectorError:
-            return False
+                issue = self._get_issue(client, repo, number)
+        except ConnectorError as exc:
+            if exc.code == "GITHUB_API_ERROR" and " 404 " in str(exc):
+                return False
+            raise
         if action.action_type == "github.create_issue":
             return (issue.get("number") == output.get("issue_number")
                     and issue.get("title") == output.get("title")
@@ -259,11 +408,13 @@ class GithubConnector(Connector):
             current = {label["name"] for label in issue.get("labels", [])}
             return set(output.get("labels", []) or []) <= current
         if action.action_type == "github.update_issue":
-            return (issue.get("number") == int(issue_number)
+            return (issue.get("number") == number
                     and issue.get("title") == output.get("title"))
         if action.action_type == "github.close_issue":
             return issue.get("state") == "closed"
-        return False
+        raise ConnectorError("UNKNOWN_ACTION",
+                             f"unknown action {action.action_type}",
+                             retryable=False)
 
     def compensate(self, ctx: dict, action: ActionContract, inputs: dict,
                    output: dict) -> dict:
@@ -275,6 +426,7 @@ class GithubConnector(Connector):
             raise ConnectorError("COMPENSATION_REFUSED",
                                  "cannot compensate: missing repo or issue_number",
                                  retryable=False)
+        require_allowed_repo(str(repo), self._allowed())
         with self._client(token) as client:
             if action.action_type == "github.create_issue":
                 self._request(client, "PATCH",
@@ -394,7 +546,16 @@ class GithubConnector(Connector):
 
 
 def register_github(transport: httpx.BaseTransport | None = None) -> GithubConnector:
-    """Register the GitHub connector (call explicitly; not automatic)."""
+    """Register the GitHub connector (call explicitly; not automatic).
+
+    Registers ONLY when a token AND a non-empty repo allowlist are both
+    configured; otherwise raises ``GITHUB_NOT_CONFIGURED`` with the honest
+    reason and the connector stays absent from the registry.
+    """
+    decision = registration_decision()
+    if not decision["register"]:
+        raise ConnectorError("GITHUB_NOT_CONFIGURED", str(decision["reason"]),
+                             retryable=False)
     connector = GithubConnector(transport=transport)
     register(connector)
     return connector

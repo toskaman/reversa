@@ -43,12 +43,14 @@ export default function Overview() {
         </div>
       </div>
       <h2>Recent workflows</h2>
+      <div className="table-wrap">
       <table><thead><tr><th>ID</th><th>Name</th><th>State</th><th>Steps</th><th /></tr></thead>
         <tbody>{items.map((w) => (
           <tr key={w.id}><td>{w.id}</td><td>{w.name}</td>
             <td><StatusBadge state={w.state} /></td><td>{w.steps}</td>
             <td><Link href={`/workflows/${w.id}`}>Open</Link></td></tr>
         ))}</tbody></table>
+      </div>
     </div>
   );
 }

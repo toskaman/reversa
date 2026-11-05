@@ -119,3 +119,28 @@ Total VO ≈ 230 words ≈ 95 s at 150 wpm + 5 s tail card.
 
 ---
 *AGENT-19 · REVERSA V2 cycle 1 · Media Director · 2026-11-05. Read-only audit + this file.*
+
+---
+
+## 4. Cycle 2 capture status (AGENT-19, 2026-11-05, LOCAL stack only)
+
+Clips: `docs/jury/v2-clips/` (10 files + `shot-log.md`). Source: in-process
+TestClient, fresh temp DB. No prod contact. No secrets in any clip (scanned).
+
+| Scene | Status | Evidence |
+|---|---|---|
+| S1 Hook | CAPTURED (data) | `s1-hook.json`: wf 2 seq 6 `billing.create_profile` FAILED, `chaos.injected` seq 35+ |
+| S2 Plan | CAPTURED (data) | `s2-plan.json`: 10 steps, deterministic, AWAITING_APPROVAL, approvals_required=true |
+| S3 Execution | CAPTURED (data) | `s3-execution.json`: COMPLETED 10/10 VERIFIED, 59 events, real resources |
+| S4 Chaos | CAPTURED (data) | `s4-chaos.json`: COMPENSATED, seq 6 FAILED, seqs 9+10 SKIPPED |
+| S5 Recovery | CAPTURED (data) | `s5-recovery.json`: order [8,7,5,4,3,2,1], workspace 0, 4 users archived, 81 events |
+| S6 Evidence | CAPTURED (data) | `s6-evidence-*.json` + `s6-passport-*.html` + `s6-cli-verify.txt` (rc 0/0/0, strict anchors match) |
+| S1–S6 screen recordings | PENDING | needs Chromium 1280×800 motion captures (see shot log P1) |
+| Voiceover + SRT | PENDING | shot log P2 |
+| ffmpeg assembly + demo.mp4 swap | PENDING | shot log P3 |
+
+"CAPTURED (data)" = real local scenario outputs backing each scene's
+on-screen claims; pixel-level screen recordings remain pending. Published
+jury numbers unchanged (505 ms / 1.78 s / 100% / 59 events / 15 chains).
+
+*AGENT-19 · REVERSA V2 cycle 2 · Media Director · 2026-11-05. Local captures + shot log; no media rebuilt.*

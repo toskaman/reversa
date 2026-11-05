@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import os
 
-from sqlalchemy import create_engine
+from sqlalchemy import create_engine, event
 from sqlalchemy.orm import DeclarativeBase, sessionmaker
 
 from .config import settings
@@ -33,15 +33,28 @@ def _url(name: str) -> str:
     return f"sqlite:///{path}"
 
 
+def _sqlite_pragmas(dbapi_conn, _record) -> None:
+    # WAL lets concurrent readers proceed during the single writer's txn
+    # (the 5-thread probe shape); busy_timeout turns lock contention into
+    # waits instead of OperationalErrors. Durability settings untouched.
+    cur = dbapi_conn.cursor()
+    cur.execute("PRAGMA journal_mode=WAL")
+    cur.execute("PRAGMA busy_timeout=30000")
+    cur.close()
+
+
 def engine_for(name: str):
     if name not in _engines:
         url = _url(name)
         if url.startswith("sqlite"):
-            kw = {"connect_args": {"check_same_thread": False}}
+            kw = {"connect_args": {"check_same_thread": False, "timeout": 30}}
         else:
             # Naive-UTC params must be interpreted as UTC by Postgres.
             kw = {"connect_args": {"options": "-c timezone=UTC"}}
-        _engines[name] = create_engine(url, future=True, **kw)
+        engine = create_engine(url, future=True, **kw)
+        if url.startswith("sqlite"):
+            event.listen(engine, "connect", _sqlite_pragmas)
+        _engines[name] = engine
     return _engines[name]
 
 

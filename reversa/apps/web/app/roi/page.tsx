@@ -39,6 +39,7 @@ export default function Roi() {
         </div>
         <div className="card">
           <h2>Projection</h2>
+          <div className="table-wrap">
           <table><tbody>
             <tr><td>Incidents / month</td><td><b>{incidents.toFixed(1)}</b></td></tr>
             <tr><td>Manual cost / month</td><td><b>${manualCost.toFixed(0)}</b></td></tr>
@@ -48,6 +49,7 @@ export default function Roi() {
             <tr><td>Saved / month</td><td><b>${savedMonth.toFixed(0)}</b></td></tr>
             <tr><td>Saved / year</td><td><b>${savedYear.toFixed(0)}</b></td></tr>
           </tbody></table>
+          </div>
           <p className="muted">Formulas: incidents = workflows × rate;
             saved = incidents × auto-share × cost. Sources: your inputs +
             our measured recovery rate (demo benchmark, n=5).</p>

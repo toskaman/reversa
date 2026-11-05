@@ -79,8 +79,10 @@ empty); this matrix is designed from the inspected code and the cycle-1 mandate.
 
 ## Tally
 
-- Covered: 5/20 (CM-01, CM-02, CM-08, CM-19, CM-20) + 2 partial (CM-14 store-level, CM-18 COMPLETED-sibling).
-- Missing: 15 (priority order: CM-04, CM-03, CM-05, CM-10, CM-09, CM-11, CM-13, CM-14, CM-15, CM-06, CM-07, CM-16, CM-12, CM-17, CM-18).
+- Covered: 10/20 — CM-01, CM-02, CM-08, CM-19, CM-20 (cycle V2-01) + CM-04, CM-03, CM-05,
+  CM-10, CM-09 (cycle V2-02, `tests/test_chaos_matrix.py`) + 2 partial (CM-14 store-level,
+  CM-18 COMPLETED-sibling).
+- Missing: 10 (priority order: CM-11, CM-13, CM-14, CM-15, CM-06, CM-07, CM-16, CM-12, CM-17, CM-18).
 
 ## Observations for implementers (not changes)
 

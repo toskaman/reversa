@@ -1,0 +1,2 @@
+# Reversa backups (pg_dump + /data snapshots). Never commit.
+backups/

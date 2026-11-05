@@ -11,6 +11,7 @@ from reversa_api.engine.saga import (
     claim_action,
     execute_workflow_sync,
     reconcile_on_startup,
+    resume_workflow_sync,
 )
 from reversa_api.engine.states import (
     InvalidTransition,
@@ -360,3 +361,290 @@ def test_restart_resume_recovers_all_inflight_states(fresh_db, demo_auth):
         assert names == ["ws-a", "ws-b", "ws-c", "ws-d"], names
     finally:
         session.close()
+
+
+def test_verifying_to_unknown_outcome_allowed():
+    """VERIFYING -> UNKNOWN_OUTCOME is allowlisted (uncertain verification)."""
+    check_action_transition("VERIFYING", "UNKNOWN_OUTCOME")
+    check_action_transition("UNKNOWN_OUTCOME", "VERIFYING")
+    check_action_transition("VERIFYING", "VERIFIED")
+    with pytest.raises(InvalidTransition):
+        check_action_transition("VERIFYING", "PENDING")
+
+
+def test_resume_claimed_stale_requeues_and_completes(fresh_db, demo_auth):
+    import datetime as dt
+    session = session_for("main")()
+    try:
+        wf = Workflow(org_id=demo_auth["org_id"], name="t", intent="t",
+                      state="RUNNING", plan_json="{}", created_by="test")
+        session.add(wf)
+        session.flush()
+        _seed_action(session, wf.id, seq=1, state="CLAIMED", key="k-rv-claimed",
+                      inputs={"org_slug": "ws-claimed"},
+                      lease_expires_at=utcnow() - dt.timedelta(seconds=60))
+        session.commit()
+        wf_id = wf.id
+    finally:
+        session.close()
+    result = resume_workflow_sync(session_for("main"), wf_id, worker_id="worker-2")
+    assert result["state"] == "COMPLETED", result
+    assert result["stats"]["requeued"] == 1, result
+    session = session_for("main")()
+    try:
+        action = session.query(ActionRun).filter_by(
+            idempotency_key="k-rv-claimed").one()
+        assert action.state == "VERIFIED"
+    finally:
+        session.close()
+
+
+def test_resume_executing_stale_recovers_via_unknown(fresh_db, demo_auth):
+    import datetime as dt
+    session = session_for("main")()
+    try:
+        wf = Workflow(org_id=demo_auth["org_id"], name="t", intent="t",
+                      state="RUNNING", plan_json="{}", created_by="test")
+        session.add(wf)
+        session.flush()
+        _seed_action(session, wf.id, seq=1, state="EXECUTING", key="k-rv-exec",
+                      inputs={"org_slug": "ws-exec"},
+                      lease_expires_at=utcnow() - dt.timedelta(seconds=60))
+        session.commit()
+        wf_id = wf.id
+    finally:
+        session.close()
+    result = resume_workflow_sync(session_for("main"), wf_id, worker_id="worker-2")
+    assert result["state"] == "COMPLETED", result
+    assert result["stats"]["unknown"] == 1, result
+    assert result["stats"]["failed"] == 1, result
+    session = session_for("main")()
+    try:
+        action = session.query(ActionRun).filter_by(
+            idempotency_key="k-rv-exec").one()
+        assert action.state == "VERIFIED"
+    finally:
+        session.close()
+
+
+def test_resume_succeeded_with_effect_confirms_without_reexecution(
+        fresh_db, demo_auth):
+    """SUCCEEDED-stale with a real effect -> VERIFIED, attempt untouched."""
+    import datetime as dt
+
+    from reversa_api.connectors.sdk import get_connector
+    identity = get_connector("demo-identity")
+    contract = identity.contract_for("identity.create_workspace")
+    session = session_for("main")()
+    try:
+        wf = Workflow(org_id=demo_auth["org_id"], name="t", intent="t",
+                      state="RUNNING", plan_json="{}", created_by="test")
+        session.add(wf)
+        session.flush()
+        output = identity.execute(
+            {"org_id": demo_auth["org_id"], "is_demo": True,
+             "workflow_id": wf.id, "idempotency_key": "k-rv-succ"},
+            contract, {"org_slug": "ws-succ"})
+        _seed_action(session, wf.id, seq=1, state="SUCCEEDED", key="k-rv-succ",
+                      inputs={"org_slug": "ws-succ"}, output=output,
+                      lease_expires_at=utcnow() - dt.timedelta(seconds=60))
+        session.commit()
+        wf_id = wf.id
+    finally:
+        session.close()
+    result = resume_workflow_sync(session_for("main"), wf_id, worker_id="worker-2")
+    assert result["state"] == "COMPLETED", result
+    assert result["stats"]["verified"] == 1, result
+    session = session_for("main")()
+    try:
+        action = session.query(ActionRun).filter_by(
+            idempotency_key="k-rv-succ").one()
+        assert action.state == "VERIFIED"
+        assert action.attempt == 1, "confirmed effects must never re-execute"
+        assert len(identity.db.list(demo_auth["org_id"], kind="workspace")) == 1
+    finally:
+        session.close()
+
+
+def test_resume_verifying_absent_retries_to_completed(fresh_db, demo_auth):
+    import datetime as dt
+    session = session_for("main")()
+    try:
+        wf = Workflow(org_id=demo_auth["org_id"], name="t", intent="t",
+                      state="RUNNING", plan_json="{}", created_by="test")
+        session.add(wf)
+        session.flush()
+        _seed_action(session, wf.id, seq=1, state="VERIFYING", key="k-rv-verify",
+                      inputs={"org_slug": "ws-verify"},
+                      lease_expires_at=utcnow() - dt.timedelta(seconds=60))
+        session.commit()
+        wf_id = wf.id
+    finally:
+        session.close()
+    result = resume_workflow_sync(session_for("main"), wf_id, worker_id="worker-2")
+    assert result["state"] == "COMPLETED", result
+    assert result["stats"]["failed"] == 1, result
+    session = session_for("main")()
+    try:
+        action = session.query(ActionRun).filter_by(
+            idempotency_key="k-rv-verify").one()
+        assert action.state == "VERIFIED"
+    finally:
+        session.close()
+
+
+def test_resume_unknown_indeterminate_defers_with_backoff(fresh_db, demo_auth):
+    """Stale UNKNOWN with unreadable state defers with backoff, never forced.
+
+    While corrupt the resume honestly reports RUNNING with the action still
+    UNKNOWN_OUTCOME; after repair the same resume completes the workflow.
+    """
+    import datetime as dt
+
+    from reversa_api.models import Event
+    session = session_for("main")()
+    try:
+        wf = Workflow(org_id=demo_auth["org_id"], name="t", intent="t",
+                      state="RUNNING", plan_json="{}", created_by="test")
+        session.add(wf)
+        session.flush()
+        _seed_action(session, wf.id, seq=1, state="UNKNOWN_OUTCOME",
+                      key="k-rv-unk", inputs={"org_slug": "ws-unk"},
+                      output="{corrupt!!!", error="CHAOS_TIMEOUT: simulated",
+                      lease_expires_at=utcnow() - dt.timedelta(seconds=60))
+        session.commit()
+        wf_id = wf.id
+    finally:
+        session.close()
+    result = resume_workflow_sync(session_for("main"), wf_id, worker_id="worker-2")
+    assert result["state"] == "RUNNING", result
+    assert result["stats"]["deferred"] >= 1, result
+    assert result["stats"]["reconcile_pending"] == 1, result
+    session = session_for("main")()
+    try:
+        action = session.query(ActionRun).filter_by(
+            idempotency_key="k-rv-unk").one()
+        assert action.state == "UNKNOWN_OUTCOME", "never force-resolved"
+        deferred = session.query(Event).filter_by(
+            workflow_id=wf_id, type="action.reconcile_deferred").all()
+        assert len(deferred) >= 1, "stale UNKNOWN must log a backoff event"
+        payload = json.loads(deferred[0].payload_json)
+        assert payload["wait_s"] > 0, payload
+        action.output_json = "{}"
+        session.commit()
+    finally:
+        session.close()
+    result = resume_workflow_sync(session_for("main"), wf_id, worker_id="worker-2")
+    assert result["state"] == "COMPLETED", result
+
+
+def test_resume_compensating_states_recover(fresh_db, demo_auth):
+    """COMPENSATING-stale: gone -> COMPENSATED, present -> failed then undone."""
+    import datetime as dt
+
+    from reversa_api.connectors.sdk import get_connector
+    identity = get_connector("demo-identity")
+    contract = identity.contract_for("identity.create_workspace")
+    stale = utcnow() - dt.timedelta(seconds=60)
+    session = session_for("main")()
+    try:
+        wf = Workflow(org_id=demo_auth["org_id"], name="b", intent="b",
+                      state="COMPENSATING", plan_json="{}", created_by="test")
+        session.add(wf)
+        session.flush()
+
+        def ctx(key: str) -> dict:
+            return {"org_id": demo_auth["org_id"], "is_demo": True,
+                    "workflow_id": wf.id, "idempotency_key": key}
+
+        out_gone = identity.execute(
+            ctx("k-rv-c5"), contract, {"org_slug": "ws-rv-e"})
+        identity.db.set_status(out_gone["resource"]["id"],
+                               out_gone["resource"]["version"], "archived")
+        out_present = identity.execute(
+            ctx("k-rv-c6"), contract, {"org_slug": "ws-rv-f"})
+        _seed_action(session, wf.id, seq=5, state="COMPENSATING", key="k-rv-c5",
+                      inputs={"org_slug": "ws-rv-e"}, output=out_gone,
+                      lease_expires_at=stale)
+        _seed_action(session, wf.id, seq=6, state="COMPENSATING", key="k-rv-c6",
+                      inputs={"org_slug": "ws-rv-f"}, output=out_present,
+                      lease_expires_at=stale)
+        session.commit()
+        wf_id = wf.id
+    finally:
+        session.close()
+    result = resume_workflow_sync(session_for("main"), wf_id, worker_id="worker-2")
+    assert result["state"] == "COMPENSATED", result
+    assert result["stats"]["compensated"] == 1, result
+    assert result["stats"]["comp_failed"] == 1, result
+
+
+def test_resume_live_lease_untouched(fresh_db, demo_auth):
+    """Fresh leases are never stolen by resume (counted as live)."""
+    import datetime as dt
+    session = session_for("main")()
+    try:
+        wf = Workflow(org_id=demo_auth["org_id"], name="t", intent="t",
+                      state="RUNNING", plan_json="{}", created_by="test")
+        session.add(wf)
+        session.flush()
+        _seed_action(session, wf.id, seq=1, state="VERIFYING", key="k-rv-live",
+                      inputs={"org_slug": "ws-live"},
+                      lease_owner="live-worker",
+                      lease_expires_at=utcnow() + dt.timedelta(seconds=60))
+        session.commit()
+        wf_id = wf.id
+    finally:
+        session.close()
+    result = resume_workflow_sync(session_for("main"), wf_id, worker_id="worker-2")
+    assert result["state"] == "RUNNING", result
+    assert result["stats"]["live"] == 1, result
+    session = session_for("main")()
+    try:
+        action = session.query(ActionRun).filter_by(
+            idempotency_key="k-rv-live").one()
+        assert action.state == "VERIFYING"
+        assert action.lease_owner == "live-worker"
+    finally:
+        session.close()
+
+
+def test_resume_route_recovers_interrupted_workflow(client, demo_auth):
+    import datetime as dt
+    session = session_for("main")()
+    try:
+        wf = Workflow(org_id=demo_auth["org_id"], name="t", intent="t",
+                      state="RUNNING", plan_json="{}", created_by="test")
+        session.add(wf)
+        session.flush()
+        _seed_action(session, wf.id, seq=1, state="CLAIMED", key="k-rv-route",
+                      inputs={"org_slug": "ws-route"},
+                      lease_expires_at=utcnow() - dt.timedelta(seconds=60))
+        session.commit()
+        wf_id = wf.id
+    finally:
+        session.close()
+    r = client.post(f"/api/v1/workflows/{wf_id}/resume",
+                    headers=demo_auth["headers"])
+    assert r.status_code == 200, r.text
+    body = r.json()
+    assert body["workflow"]["state"] == "COMPLETED", body
+    assert body["resume"]["requeued"] == 1, body
+    assert body["terminal"] is True
+    assert body["actions"][0]["state"] == "VERIFIED"
+
+
+def test_resume_route_rejects_terminal_and_ready(client, demo_auth):
+    from .conftest import make_ready
+    made = make_ready(client, demo_auth)
+    wf_id = made["workflow"]["id"]
+    # READY has nothing to resume: use execute, not resume.
+    r = client.post(f"/api/v1/workflows/{wf_id}/resume",
+                    headers=demo_auth["headers"])
+    assert r.status_code == 409, r.text
+    r = client.post(f"/api/v1/workflows/{wf_id}/execute",
+                    headers=demo_auth["headers"])
+    assert r.json()["workflow"]["state"] == "COMPLETED"
+    r = client.post(f"/api/v1/workflows/{wf_id}/resume",
+                    headers=demo_auth["headers"])
+    assert r.status_code == 409, r.text

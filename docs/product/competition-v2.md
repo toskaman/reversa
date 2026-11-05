@@ -134,3 +134,154 @@ grounded in repo (`README.md`, `docs/product/recovery-proof-engine.md`).
    the unopened titles above.
 
 No copied code. No rival test/deployment results asserted. No secrets.
+
+---
+
+# Cycle 2 re-check (AGENT-17, REVERSA V2 cycle 2, 2026-11-05 later same day)
+
+Sources: public LabLab pages only, no login. 7 pages read in full this
+cycle: live board + the 4 titles left unopened in cycle 1 + 2 newly
+surfaced submissions. All competitor claims are **as described on their
+public pages, unverified by us**.
+
+## Board counters (2026-11-05, cycle 2)
+
+2,529 participants (+95 today), 707 teams (+45 today; was 706 in cycle
+1), 44 submissions (+25 today), 21 drafts (+10 today). The public live
+page still surfaces the same ~10 top-voted titles; the +25 submissions
+are not individually visible, so most of the field remains unobservable
+from public pages.
+
+## Previously unopened titles — now inspected (all dated 2026-11-03/05)
+
+### 7. Blast Radius Zero: sandboxed agent runtime (team Blast Radius Zero Solo, 2026-11-03, 0 votes)
+Containment-first agent runtime, deployed on Vultr. Planner (Vultr
+Serverless Inference, glm-5.3) proposes exactly one action per turn as a
+complete Python program; each runs in a fresh container (no network,
+read-only root, unprivileged, caps dropped, 256MB, 0.5 CPU, 64 pids,
+20s watchdog). /out snapshots served as artefacts; a second model call
+audits the final answer against recorded evidence (stdout, exit codes,
+artefact list) — unsupported claims are not marked verified. SQLite
+ledger; UI shows program/output/verdict side by side. "Containment Lab"
+runs 7 real attacks (fs tamper, fork bomb, infinite loop, egress,
+credential hunt, memory bomb, disk fill) through the same sandbox path,
+reporting kernel evidence (EROFS, OOM-kill, no route, watchdog kill).
+Stack: FastAPI+SSE, Docker+gVisor/runsc, Caddy, systemd, SQLite; VM
+provisioned by repo scripts.
+- Recovery/orchestration observed: **none** — no retry, compensation,
+  undo, or healing described. Verification is a post-hoc audit verdict,
+  not recovery.
+
+### 8. Trifecta Checker - Blast Radius Zero (team Trifecta Checker, 2026-11-03, 0 votes)
+Pre-execution AI Safety Gate: blocks "Lethal Trifecta"
+(Private+Untrusted+External = 403 BLOCKED, else 200 CLEAN); blocks Vultr
+VM spawn if malicious. Trust scores by domain (.gov=100 … unknown=10);
+identity/agent-responsibility framing (DID, agent cards, CIS-8).
+Deployed on Vercel (badge shown); Vultr VM described as pending ($5
+deposit awaited). Built mobile-first after author's PC died.
+- Recovery/orchestration observed: **none** — pure pre-exec block,
+  no healing, no undo, no orchestration across systems.
+
+### 9. QuantGate (team WataruAkis, 2026-11-03, 1 vote)
+ML release gate: decides whether a smaller activation format is safe to
+ship. Vultr Serverless Inference plans evaluation + generates a
+constrained Python scoring kernel; disposable Docker worker on Vultr
+Cloud Compute compiles to native C++, verifies calibration against an
+independent Python reference. Checks sample overlap across partitions,
+freezes candidate on dev data before holdout slices. Demo: INT8 blocked
+(low-margin holdout accuracy 59.38%). Report shows code, fingerprints,
+per-slice measurements, execution trace. Sandbox: no network, non-root,
+read-only root, CPU/RAM/time caps; timeout probe demo. Honest limits
+stated (rounding simulated at layer boundaries; byte counts cover
+encoded activations only).
+- Recovery/orchestration observed: **none** — a release *gate*, not
+  healing. No compensation, retry, or undo semantics.
+
+### 10. SAAS Fashion Garment Marketing - Batik to Global (team SuperInfra Trinity V32-2 SOLO, 2026-11-05, 2 votes)
+Off-theme: Indonesian Batik SME supply-chain/finance SaaS (Google
+Sheets-backed SAK EMKM accounting, demand planner, GPS transport,
+Streamlit demo). Uses Vultr Serverless Inference (DeepSeek/Llama) for
+Batik motif generation; claims Vultr Cloud Compute Jakarta + AMD MI300X
+analytics. No safety, orchestration, or recovery content.
+- Recovery/orchestration observed: **none**.
+
+## Newly surfaced submissions (found via "Explore more" links, 2026-11-05, 0 votes each)
+
+### 11. Fathom: AI Database Copilot on Vultr (team Fathom, 2026-11-05, 0 votes)
+Autonomous DB copilot: upload .sql/.sqlite (≤25MB), ask in plain
+English; DeepSeek-on-Vultr-Inference agent explores schema, writes SQL,
+runs it, checks results (empty sets, truncation, null-heavy columns,
+join fanout) and **rewrites the query when the evidence says it is
+wrong**. Live timeline; answer as table/chart/explanation/refreshable
+dashboard. Model treated as untrusted: SQLGlot guard — reads run,
+single writes need explicit confirmation, DROP/ALTER/CREATE/ATTACH/
+PRAGMA/load_extension are **refused**. Fresh Docker container per step
+(no net, read-only root, caps dropped, pid/mem/CPU caps, removed after
+each step); secrets never enter sandbox. "Containment drill" button;
+DROP TABLE visibly marked Blocked. One Vultr VM (Caddy+Next.js+FastAPI),
+all LLM calls to Vultr Serverless Inference.
+- Recovery/orchestration observed: **query-rewrite loop only**
+  (retry-like, single-system). The *refusal* concept is the closest
+  parallel to REVERSA's refused-by-design seen so far — but it is a
+  **pre-execution guard on SQL DDL**, not refusal of unsafe *undo* and
+  not verified compensation. No multi-system saga, no tri-state
+  recovery verdict.
+
+### 12. Upgrade Proof (team Upgrade Proof, 2026-11-05, 0 votes)
+Proves npm upgrades in disposable Vultr sandboxes for dependency-PR
+reviewers. Vultr Inference (qwen3.8-27b) plans from package.json; agent
+runs baseline tests → upgrade → tests again, each step in a new Docker
+container (no host env, no caps, read-only root, non-root, npm-registry-
+only proxy). **If tests fail, the model proposes a fix; applied and
+retested, up to 3 times.** Demo: chalk 4→5.4.1 (ESM break fixed, tests
+pass); hostile postinstall's 2 exfil calls proxy-blocked, 0 tokens seen;
+26 s run. Output bundle: summary.json, upgrade.diff, step logs,
+egress-blocked.jsonl, manifest.json with per-file SHA-256. Honest
+limits: npm only, one run at a time, Docker not microVMs.
+- Recovery/orchestration observed: **bounded fix-and-retest loop
+  (≤3, code-level)**. No compensation/undo semantics, no refusal to
+  claim recovery, no cross-system orchestration. Evidence-bundle story
+  (hashed manifest) joins YAI Guard/VOIDLOCK/Detonation in making
+  hash-chained evidence table stakes (now 4+ rivals).
+
+## Spotted but not opened (titles only, no claims)
+
+- CiteScreen — evidence-based resume screening (team resync).
+- Theseus — "keep only what's load-bearing" (team Theseus).
+- Both surfaced only as "Explore more" links; neither title suggests a
+  recovery/orchestration approach, but open before the final pitch.
+
+## Cycle 2 matrix delta (append-only; cycle 1 table above unchanged)
+
+| Capability | REVERSA | BR-Zero solo | Trifecta | QuantGate | SAAS Fashion | Fathom | Upgrade Proof |
+|---|---|---|---|---|---|---|---|
+| Sandboxed execution | Demo-tenant isolation (no code sandbox) | YES (gVisor) | — (API gate) | YES (Docker) | — | YES (Docker) | YES (Docker+proxy) |
+| Verify every effect | YES (connector verify) | YES (audit vs evidence) | — (block only) | YES (reference check) | — | YES (result checks) | YES (tests before/after) |
+| Typed compensation / undo | YES (6 levels, verified) | — | — | — | — | — | — |
+| Refuse unsafe undo | YES (refused-by-design) | — | — (pre-exec block) | — (release gate) | — | — (pre-exec DDL refusal) | — |
+| Tri-state recovery verdict | YES (PRESENT/ABSENT/UNKNOWN) | Audit verdict ≠ recovery | — | Gate verdict ≠ recovery | — | — | — |
+| Human approval gate | YES (plan-hash-bound, 30-min TTL) | — | — | — | — | YES (writes need confirm) | — |
+| Hash-chained evidence | YES (SHA-256 + offline CLI) | SQLite ledger (hash unclaimed) | SHA-256 (agent cards) | Fingerprints+trace | — | Timeline (hash unclaimed) | YES (SHA-256 manifest) |
+| Live Vultr deployment (claimed) | YES (1 VM, measured) | Claimed (script-deployed) | NO (Vercel; Vultr pending) | Claimed (demo URL) | Claimed | Claimed (1 VM) | Claimed (demo URL) |
+
+## Cycle 2 conclusions (2026-11-05)
+
+1. **Still nobody observed does typed, verified compensation across
+   multi-system business effects.** 12/12 inspected submissions now:
+   the nearest recovery-adjacent patterns remain retry loops
+   (Fathom query-rewrite, Upgrade Proof ≤3 fix-retries) and pre-exec
+   gates (Trifecta, QuantGate, Fathom DDL refusal). None describes
+   undo semantics, verify-after-undo, or refusal-to-claim-recovery.
+   Differentiation statement from cycle 1 holds verbatim.
+2. **Evidence pressure keeps rising**: Upgrade Proof is the 4th rival
+   with hashed evidence bundles. Keep the live offline-CLI verify +
+   RPE tri-state story as the counter.
+3. **Fathom is the closest new rival to watch**: one-VM Vultr deploy,
+   visible timeline, and a *refusal* concept (pre-exec DDL). Pitch line
+   stays: "they refuse dangerous *commands*; we refuse unsafe *undo*
+   — and prove absence after it."
+4. **Coverage is still partial**: only 12 of 44 submissions (+21
+   drafts) observable from public pages. Re-check Nov 7–8; open
+   CiteScreen and Theseus first, then any newly top-voted titles.
+
+No copied code. No rival test/deployment results asserted. No secrets.

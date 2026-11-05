@@ -78,7 +78,7 @@ ACT_TRANSITIONS: dict[str, frozenset[str]] = {
     "CLAIMED": frozenset({"EXECUTING", "PENDING"}),
     "EXECUTING": frozenset({"SUCCEEDED", "FAILED", "UNKNOWN_OUTCOME"}),
     "SUCCEEDED": frozenset({"VERIFYING"}),
-    "VERIFYING": frozenset({"VERIFIED", "FAILED"}),
+    "VERIFYING": frozenset({"VERIFIED", "FAILED", "UNKNOWN_OUTCOME"}),
     "VERIFIED": frozenset({"COMPENSATION_PENDING"}),
     "FAILED": frozenset({"RETRY_SCHEDULED", "COMPENSATION_PENDING", "SKIPPED"}),
     "RETRY_SCHEDULED": frozenset({"PENDING"}),

@@ -24,6 +24,7 @@ export default function Recovery() {
       <h1>Recovery Center</h1>
       <p className="sub">Failures, compensations and actions needing a human.</p>
       {error && <div className="err">{error}</div>}
+      <div className="table-wrap">
       <table><thead><tr><th>ID</th><th>Name</th><th>State</th><th /></tr></thead>
         <tbody>{items.map((w) => (
           <tr key={w.id}><td>{w.id}</td><td>{w.name}</td>
@@ -31,6 +32,7 @@ export default function Recovery() {
             <td><Link href={`/workflows/${w.id}`}>Open</Link> ·{" "}
               <Link href={`/evidence/${w.id}`}>Evidence</Link></td></tr>
         ))}</tbody></table>
+      </div>
       {items.length === 0 && !error && <p className="muted">No recovery cases.</p>}
     </div>
   );

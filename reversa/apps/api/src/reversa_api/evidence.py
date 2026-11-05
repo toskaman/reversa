@@ -13,7 +13,7 @@ import hashlib
 import json
 from typing import Any
 
-from sqlalchemy import func, select
+from sqlalchemy import select
 
 from .models import Event
 
@@ -68,16 +68,20 @@ def canonical_bytes(payload: dict) -> bytes:
 def append_event(session, workflow_id: int, org_id: int, type: str, payload: dict,
                  actor: str = "system") -> Event:
     """Append one event; computes seq + hash chain. Flushes (so the next
-    max(seq) SELECT sees it) but commits nothing (caller owns the tx)."""
+    tail SELECT sees it) but commits nothing (caller owns the tx)."""
     clean = redact(payload)
-    last_hash = session.scalar(
-        select(Event.hash).where(Event.workflow_id == workflow_id).order_by(Event.seq.desc())
-    )
-    prev = last_hash or GENESIS
-    last_seq = session.scalar(
-        select(func.max(Event.seq)).where(Event.workflow_id == workflow_id)
-    )
-    seq = (last_seq or 0) + 1
+    # One indexed tail read (seq, hash) instead of two (hash-by-order + max(seq)):
+    # same values, half the SELECTs per INSERT.
+    last = session.execute(
+        select(Event.seq, Event.hash)
+        .where(Event.workflow_id == workflow_id)
+        .order_by(Event.seq.desc())
+        .limit(1)
+    ).first()
+    if last is None:
+        prev, seq = GENESIS, 1
+    else:
+        prev, seq = last.hash, last.seq + 1
     body = {
         "workflow_id": workflow_id,
         "org_id": org_id,

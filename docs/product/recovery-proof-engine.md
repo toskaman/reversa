@@ -1,6 +1,9 @@
 # Recovery Proof Engine — Product Spec (REVERSA V2, cycle 1)
 
-- Status: DRAFT spec (AGENT-04, Recovery Researcher). No implementation in this cycle.
+- Status: v1 SHIPPED (cycle V2-02, AGENT-04): GET /api/v1/workflows/{id}/recovery-manifest
+  (`routes/recovery.py`, 10 tests in `tests/test_recovery_manifest.py`), confidence levels
+  VERIFIED / VERIFIED_WITH_COMPENSATION / PARTIAL / INDETERMINATE / MANUAL_REQUIRED
+  with C0–C7 criteria; codes R4_NOT_TERMINAL / R5_CANCELLED_RUN.
 - Scope: defines what "recovered" means, what evidence proves it, and when the
   engine must refuse to claim recovery.
 - Non-goals: no new states, no API changes, no UI changes in this cycle.

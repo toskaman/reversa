@@ -396,16 +396,21 @@ def _resume_interrupted_compensation(session, wf: Workflow, org: Organization,
     return outcome
 
 
-def _deps_status(session, wf: Workflow, action: ActionRun) -> str:
+def _deps_status(session, wf: Workflow, action: ActionRun,
+                 states: dict[int, str] | None = None) -> str:
     deps = json.loads(action.depends_on or "[]")
     if not deps:
         return "ready"
-    states = {
-        row.seq: row.state
-        for row in session.scalars(
-            select(ActionRun).where(ActionRun.workflow_id == wf.id)
-        ).all()
-    }
+    # Pump callers pass the precomputed {seq: state} map (built from the
+    # already-loaded actions, so identical to a re-SELECT via the identity
+    # map); direct callers without a map keep the one-shot load.
+    if states is None:
+        states = {
+            row.seq: row.state
+            for row in session.scalars(
+                select(ActionRun).where(ActionRun.workflow_id == wf.id)
+            ).all()
+        }
     for dep in deps:
         if states.get(dep) != "VERIFIED":
             if states.get(dep) in (None, "SKIPPED", "FAILED", "COMPENSATED",
@@ -602,10 +607,11 @@ def _pump_forward(session, wf: Workflow, org: Organization, worker_id: str,
                                     f"seq {action.seq} {action.action_type}: {action.error}")
                 return True
     # 3. Execute the next ready action.
+    dep_states = {a.seq: a.state for a in actions}
     for action in actions:
         if action.state != "PENDING":
             continue
-        status = _deps_status(session, wf, action)
+        status = _deps_status(session, wf, action, dep_states)
         if status == "blocked":
             _transition_act(session, wf, action, "SKIPPED", worker_id,
                             "dependency failed or skipped")
@@ -816,3 +822,139 @@ def reconcile_on_startup(session_factory, worker_id: str) -> dict:
         return stats
     finally:
         session.close()
+
+
+def resume_workflow_sync(session_factory, workflow_id: int,
+                         worker_id: str = "worker-1", actor: str = "system",
+                         max_iterations: int = 1000) -> dict:
+    """Resume one interrupted workflow after a restart. Returns state+stats.
+
+    Per-action recovery scoped to this workflow (mirrors reconcile_on_startup
+    but for a single workflow, so POST /workflows/{id}/resume can recover
+    without touching other tenants' work):
+    - CLAIMED with an expired lease -> PENDING (no effect ever started).
+    - EXECUTING with an expired lease -> UNKNOWN_OUTCOME (uncertain).
+    - SUCCEEDED/VERIFYING with a stale lease -> verified in place via
+      _resume_interrupted_verification (never re-executed).
+    - UNKNOWN_OUTCOME with a stale lease -> _reconcile_unknown; PRESENT ->
+      VERIFIED, ABSENT_CONFIRMED -> FAILED (+retry), INDETERMINATE -> stays
+      UNKNOWN_OUTCOME with a backoff event (action.reconcile_deferred);
+      never force-resolved to FAILED or VERIFIED.
+    - COMPENSATING with a stale lease -> _resume_interrupted_compensation.
+    Fresh leases are left alone (counted as live).
+    After recovery the normal pump runs to completion (or honest deferral).
+    """
+    stats = {"requeued": 0, "unknown": 0, "failed": 0, "comp_failed": 0,
+             "verified": 0, "compensated": 0, "deferred": 0,
+             "reconcile_pending": 0, "live": 0}
+    session = session_factory()
+    try:
+        wf = session.get(Workflow, workflow_id)
+        if wf is None:
+            raise ConnectorError("NOT_FOUND", f"workflow {workflow_id} not found")
+        if wf.state in WF_TERMINAL or wf.state == "CANCELLED":
+            return {"state": wf.state, "stats": stats, "resumed": False}
+        org = session.get(Organization, wf.org_id)
+        if org is None:
+            return {"state": wf.state, "stats": stats, "resumed": False}
+        now = utcnow()
+        for action in session.scalars(
+            select(ActionRun).where(
+                ActionRun.workflow_id == wf.id, ActionRun.state == "CLAIMED",
+                ActionRun.lease_expires_at < now)
+        ).all():
+            _transition_act(session, wf, action, "PENDING", worker_id,
+                            "resume: lease expired")
+            action.lease_owner = ""
+            action.lease_expires_at = None
+            stats["requeued"] += 1
+        for action in session.scalars(
+            select(ActionRun).where(
+                ActionRun.workflow_id == wf.id, ActionRun.state == "EXECUTING",
+                ActionRun.lease_expires_at < now)
+        ).all():
+            _transition_act(session, wf, action, "UNKNOWN_OUTCOME", worker_id,
+                            "resume: owner crashed mid-effect")
+            stats["unknown"] += 1
+        session.commit()
+        for action in session.scalars(
+            select(ActionRun).where(
+                ActionRun.workflow_id == wf.id,
+                ActionRun.state.in_(["SUCCEEDED", "VERIFYING"]))
+        ).all():
+            if not _lease_is_stale(action, utcnow()):
+                stats["live"] += 1
+                continue
+            outcome = _resume_interrupted_verification(
+                session, wf, org, action, worker_id)
+            if outcome is VerificationOutcome.PRESENT:
+                stats["verified"] += 1
+            elif outcome is VerificationOutcome.ABSENT_CONFIRMED:
+                stats["failed"] += 1
+            else:
+                stats["deferred"] += 1
+        for action in session.scalars(
+            select(ActionRun).where(
+                ActionRun.workflow_id == wf.id,
+                ActionRun.state == "UNKNOWN_OUTCOME")
+        ).all():
+            if not _lease_is_stale(action, utcnow()):
+                stats["live"] += 1
+                continue
+            outcome = _reconcile_unknown(session, wf, org, action, worker_id)
+            if outcome is VerificationOutcome.PRESENT:
+                stats["verified"] += 1
+            elif outcome is VerificationOutcome.ABSENT_CONFIRMED:
+                stats["failed"] += 1
+            else:
+                stats["deferred"] += 1
+                delay = _backoff_delay(action)
+                append_event(
+                    session, wf.id, wf.org_id, "action.reconcile_deferred",
+                    {"seq": action.seq, "action_type": action.action_type,
+                     "wait_s": round(delay, 2),
+                     "reason": "stale UNKNOWN deferred with backoff; "
+                               "never force-resolved"},
+                    actor=worker_id,
+                )
+                session.commit()
+        for action in session.scalars(
+            select(ActionRun).where(
+                ActionRun.workflow_id == wf.id, ActionRun.state == "COMPENSATING")
+        ).all():
+            if not _lease_is_stale(action, utcnow()):
+                stats["live"] += 1
+                continue
+            outcome = _resume_interrupted_compensation(
+                session, wf, org, action, worker_id)
+            if outcome is VerificationOutcome.ABSENT_CONFIRMED:
+                stats["compensated"] += 1
+            elif outcome is VerificationOutcome.PRESENT:
+                stats["comp_failed"] += 1
+            else:
+                stats["deferred"] += 1
+        stats["reconcile_pending"] = len(session.scalars(
+            select(ActionRun).where(
+                ActionRun.workflow_id == wf.id,
+                ActionRun.state == "UNKNOWN_OUTCOME")
+        ).all())
+        # Crash between the two commits of the final check can persist a
+        # workflow-level VERIFYING with all actions already done: complete it.
+        wf_now = session.get(Workflow, workflow_id)
+        if wf_now is not None and wf_now.state == "VERIFYING":
+            acts = session.scalars(
+                select(ActionRun).where(ActionRun.workflow_id == wf.id)
+            ).all()
+            if acts and all(a.state in ACT_FORWARD_DONE for a in acts):
+                verified = sum(1 for a in acts if a.state == "VERIFIED")
+                _transition_wf(session, wf_now, "COMPLETED", worker_id,
+                               f"resume: final check recovered "
+                               f"({verified}/{len(acts)} verified)")
+                session.commit()
+        session.commit()
+    finally:
+        session.close()
+    final = execute_workflow_sync(
+        session_factory, workflow_id, worker_id=worker_id, actor=actor,
+        max_iterations=max_iterations)
+    return {"state": final, "stats": stats, "resumed": True}

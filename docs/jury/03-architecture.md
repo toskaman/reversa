@@ -17,5 +17,5 @@ Key decisions (see `.agents/decisions/ADR-001-stack.md`):
 - Demo services as isolated-state sub-apps: genuinely distributed state
   (separate files), independently queryable, extractable later.
 - Strict contracts everywhere: Pydantic `extra=forbid` plans, allowlisted
-  saga transitions (15 workflow / 14 action states), 16-field action
+  saga transitions (15 workflow / 14 action states), 13-field action
   contracts, typed errors, idempotency keys, optimistic versions.

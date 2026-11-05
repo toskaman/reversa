@@ -1,7 +1,9 @@
 """5 demo connectors + reversa-core, each with isolated SQLite state.
 
 Every forward action declares a contract; execute() is idempotent by natural
-key (org_id, kind, name) so retries after timeouts never duplicate effects.
+key (org_id, kind, name) scoped to the owning workflow run, so retries after
+timeouts never duplicate effects while two runs in one org never share rows
+(F2: a chaos run's compensation can only archive its own run's rows).
 verify() re-reads state; compensate() uses optimistic version checks and
 refuses when the resource changed incompatibly (engine -> MANUAL_REQUIRED).
 """
@@ -38,6 +40,24 @@ def _row_to_dict(row: DemoResource) -> dict:
     }
 
 
+# Reserved data_json key tagging the owning workflow run. Two runs in one org
+# reuse the same logical names ("acme", user emails); the tag keeps their rows
+# distinct so one run never reads, reuses, or archives another run's rows
+# (F2). Rows created without a run context (tests, seeding) carry no tag and
+# are visible only to unscoped (workflow_id=None) reads.
+RUN_TAG = "_reversa_run"
+
+
+def _run_of(data: dict | None) -> int | None:
+    run = (data or {}).get(RUN_TAG)
+    return run if isinstance(run, int) else None
+
+
+def _ctx_run(ctx: dict | None) -> int | None:
+    run = (ctx or {}).get("workflow_id")
+    return run if isinstance(run, int) else None
+
+
 class DemoStore:
     """Per-service persistence with optimistic concurrency."""
 
@@ -48,14 +68,24 @@ class DemoStore:
         """Resolve sessions lazily: engines can be reset (tests, reconfigure)."""
         return session_for(self._store)()
 
-    def find_active(self, org_id: int, kind: str, name: str) -> dict | None:
+    def find_active(self, org_id: int, kind: str, name: str,
+                    workflow_id: int | None = None) -> dict | None:
         s = self._factory()
         try:
-            row = (
+            rows = (
                 s.query(DemoResource)
                 .filter_by(org_id=org_id, kind=kind, name=name, status="active")
-                .first()
+                .order_by(DemoResource.id)
+                .all()
             )
+            if workflow_id is None:
+                row = rows[0] if rows else None
+            else:
+                row = next(
+                    (r for r in rows
+                     if _run_of(json.loads(r.data_json or "{}")) == workflow_id),
+                    None,
+                )
             return _row_to_dict(row) if row else None
         finally:
             s.close()
@@ -68,32 +98,55 @@ class DemoStore:
         finally:
             s.close()
 
-    def get_by_name(self, org_id: int, kind: str, name: str) -> dict | None:
+    def get_by_name(self, org_id: int, kind: str, name: str,
+                    workflow_id: int | None = None) -> dict | None:
         s = self._factory()
         try:
-            row = (
+            rows = (
                 s.query(DemoResource)
                 .filter_by(org_id=org_id, kind=kind, name=name)
                 .order_by(DemoResource.id.desc())
-                .first()
+                .all()
             )
+            if workflow_id is None:
+                row = rows[0] if rows else None
+            else:
+                row = next(
+                    (r for r in rows
+                     if _run_of(json.loads(r.data_json or "{}")) == workflow_id),
+                    None,
+                )
             return _row_to_dict(row) if row else None
         finally:
             s.close()
 
-    def create(self, org_id: int, kind: str, name: str, data: dict) -> dict:
-        """Idempotent create: returns the existing active row on replay."""
+    def create(self, org_id: int, kind: str, name: str, data: dict,
+               workflow_id: int | None = None) -> dict:
+        """Idempotent create: returns the existing active row on replay.
+
+        Idempotency is scoped to (org_id, kind, name, workflow run): replays
+        within a run return the same row, while a different run gets its own
+        row even for identical logical names (F2 cross-run isolation).
+        """
         s = self._factory()
         try:
-            existing = (
+            rows = (
                 s.query(DemoResource)
                 .filter_by(org_id=org_id, kind=kind, name=name, status="active")
-                .first()
+                .order_by(DemoResource.id)
+                .all()
             )
-            if existing:
-                return _row_to_dict(existing)
+            if workflow_id is None:
+                if rows:
+                    return _row_to_dict(rows[0])
+                payload = dict(data)
+            else:
+                for candidate in rows:
+                    if _run_of(json.loads(candidate.data_json or "{}")) == workflow_id:
+                        return _row_to_dict(candidate)
+                payload = {**data, RUN_TAG: workflow_id}
             row = DemoResource(
-                org_id=org_id, kind=kind, name=name, data_json=json.dumps(data)
+                org_id=org_id, kind=kind, name=name, data_json=json.dumps(payload)
             )
             s.add(row)
             s.commit()
@@ -173,7 +226,9 @@ class DemoStore:
         finally:
             s.close()
 
-    def list(self, org_id: int, kind: str | None = None, status: str | None = None) -> list[dict]:
+    def list(self, org_id: int, kind: str | None = None,
+               status: str | None = None,
+               workflow_id: int | None = None) -> list[dict]:
         s = self._factory()
         try:
             q = s.query(DemoResource).filter_by(org_id=org_id)
@@ -181,7 +236,11 @@ class DemoStore:
                 q = q.filter_by(kind=kind)
             if status:
                 q = q.filter_by(status=status)
-            return [_row_to_dict(r) for r in q.order_by(DemoResource.id).all()]
+            rows = q.order_by(DemoResource.id).all()
+            if workflow_id is not None:
+                rows = [r for r in rows
+                        if _run_of(json.loads(r.data_json or "{}")) == workflow_id]
+            return [_row_to_dict(r) for r in rows]
         finally:
             s.close()
 
@@ -247,6 +306,7 @@ class CrmConnector(Connector):
         row = self.db.create(
             ctx["org_id"], "organization", inputs["org_slug"],
             {"company_name": inputs["company_name"]},
+            workflow_id=_ctx_run(ctx),
         )
         return {"resource": _ref("crm", row)}
 
@@ -311,7 +371,8 @@ class IdentityConnector(Connector):
         check_preconditions(ctx, action, inputs)
         if action.action_type == "identity.create_workspace":
             row = self.db.create(
-                ctx["org_id"], "workspace", inputs["org_slug"], {"manager": None}
+                ctx["org_id"], "workspace", inputs["org_slug"], {"manager": None},
+                workflow_id=_ctx_run(ctx),
             )
             return {"resource": _ref("identity", row), "data": row["data"]}
         if action.action_type == "identity.provision_users":
@@ -323,13 +384,17 @@ class IdentityConnector(Connector):
                 row = self.db.create(
                     ctx["org_id"], "user", user["email"],
                     {"name": user.get("name", ""), "workspace": inputs["workspace"]},
+                    workflow_id=_ctx_run(ctx),
                 )
                 refs.append(_ref("identity", row))
             return {"users": refs}
         # assign_manager with internal read-modify-write retries on races.
         last_error: Exception | None = None
         for _ in range(3):
-            current = self.db.get_by_name(ctx["org_id"], "workspace", inputs["workspace"])
+            current = self.db.get_by_name(
+                ctx["org_id"], "workspace", inputs["workspace"],
+                workflow_id=_ctx_run(ctx),
+            )
             if not current or current["status"] != "active":
                 raise PreconditionFailed(f"workspace {inputs['workspace']} not active")
             try:
@@ -409,6 +474,7 @@ class SupportConnector(Connector):
         row = self.db.create(
             ctx["org_id"], kind, inputs["org_slug"],
             {"tier": inputs.get("tier", "enterprise")},
+            workflow_id=_ctx_run(ctx),
         )
         return {"resource": _ref("support", row)}
 
@@ -449,6 +515,7 @@ class BillingConnector(Connector):
         row = self.db.create(
             ctx["org_id"], "billing_profile", inputs["org_slug"],
             {"plan": inputs["plan"], "charged": False},
+            workflow_id=_ctx_run(ctx),
         )
         return {"resource": _ref("billing", row)}
 
@@ -490,6 +557,7 @@ class NotifyConnector(Connector):
         row = self.db.create(
             ctx["org_id"], "message", f"{ctx['workflow_id']}:{inputs['channel']}",
             {"channel": inputs["channel"], "message": inputs["message"], "sent": True},
+            workflow_id=_ctx_run(ctx),
         )
         return {"resource": _ref("notify", row)}
 
@@ -526,21 +594,31 @@ class CoreConnector(Connector):
             ),
         }
 
-    def _run(self, org_id: int, org_slug: str) -> dict:
+    def _run(self, org_id: int, org_slug: str, workflow_id: int | None = None) -> dict:
         checks = {}
         checks["crm_organization"] = (
-            DemoStore("crm").find_active(org_id, "organization", org_slug) is not None
+            DemoStore("crm").find_active(
+                org_id, "organization", org_slug, workflow_id=workflow_id)
+            is not None
         )
         checks["identity_workspace"] = (
-            DemoStore("identity").find_active(org_id, "workspace", org_slug) is not None
+            DemoStore("identity").find_active(
+                org_id, "workspace", org_slug, workflow_id=workflow_id)
+            is not None
         )
-        users = DemoStore("identity").list(org_id, kind="user", status="active")
-        checks["identity_users"] = len([u for u in users if u["data"].get("workspace") == org_slug])
+        users = DemoStore("identity").list(
+            org_id, kind="user", status="active", workflow_id=workflow_id)
+        checks["identity_users"] = len(
+            [u for u in users if u["data"].get("workspace") == org_slug])
         checks["support_queue"] = (
-            DemoStore("support").find_active(org_id, "queue", org_slug) is not None
+            DemoStore("support").find_active(
+                org_id, "queue", org_slug, workflow_id=workflow_id)
+            is not None
         )
         checks["billing_profile"] = (
-            DemoStore("billing").find_active(org_id, "billing_profile", org_slug) is not None
+            DemoStore("billing").find_active(
+                org_id, "billing_profile", org_slug, workflow_id=workflow_id)
+            is not None
         )
         passed = (
             checks["crm_organization"]
@@ -553,10 +631,10 @@ class CoreConnector(Connector):
 
     def execute(self, ctx: dict, action: ActionContract, inputs: dict) -> dict:
         check_preconditions(ctx, action, inputs)
-        return self._run(ctx["org_id"], inputs["org_slug"])
+        return self._run(ctx["org_id"], inputs["org_slug"], _ctx_run(ctx))
 
     def verify(self, ctx: dict, action: ActionContract, inputs: dict, output: dict) -> bool:
-        fresh = self._run(ctx["org_id"], inputs["org_slug"])
+        fresh = self._run(ctx["org_id"], inputs["org_slug"], _ctx_run(ctx))
         return bool(output.get("passed") and fresh["passed"])
 
     def compensate(self, ctx: dict, action: ActionContract, inputs: dict, output: dict) -> dict:
@@ -576,19 +654,23 @@ demo_router = APIRouter(prefix="/demo", tags=["demo-services"])
 
 @demo_router.get("/{service}/resources")
 def list_demo_resources(service: str, org: OrgCtx = Depends(get_current_org),
-                        kind: str | None = None, status: str | None = None):
+                        kind: str | None = None, status: str | None = None,
+                        workflow_id: int | None = None):
     """Query a demo service state independently (evidence: before/during/after).
 
     P0-SEC-01: the org always comes from the auth context. A client-supplied
     org_id is never accepted (IDOR/cross-tenant leak); unknown query params
     such as a legacy org_id are ignored by FastAPI.
+
+    F2: pass workflow_id to scope the listing to one run's rows; without it
+    every row of this org is returned (all runs, all statuses).
     """
     if service not in SERVICE_STORES:
         raise HTTPException(status_code=404, detail=f"unknown demo service {service}")
     return {
         "service": service,
         "resources": DemoStore(SERVICE_STORES[service]).list(
-            org.org_id, kind=kind, status=status),
+            org.org_id, kind=kind, status=status, workflow_id=workflow_id),
     }
 
 

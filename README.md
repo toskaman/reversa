@@ -44,6 +44,9 @@ browser ──HTTPS──> Caddy ──┬──> web:3000 (Next.js 15, TypeScri
   IRREVERSIBLE / MANUAL_ONLY / UNKNOWN — unsafe undo is refused, with reasons.
 - **Evidence**: SHA-256 hash-chained timeline, secrets redacted, exports +
   offline verifier (`python -m reversa_api.cli verify export.json`).
+  VALID = prefix-consistency (no gaps/mismatches in events 1..N); strict
+  mode (`--strict` with count/head anchors) rules out trailing truncation;
+  exported `ts` is not hash-covered.
 
 ## Quickstart (local, no key needed)
 
@@ -63,7 +66,7 @@ then run the 30-second demo above.
 ## Tests & benchmarks
 
 ```bash
-python -m pytest reversa/apps/api/tests/ -q        # 19 passed
+python -m pytest reversa/apps/api/tests/ -q        # 143 passed, 2 honest skips (V2)
 python reversa/tests/e2e/smoke_browser.py --token <tok>   # 9/9 in real Chromium
 python reversa/tests/performance/bench.py --base <url> --token <tok>
 ```

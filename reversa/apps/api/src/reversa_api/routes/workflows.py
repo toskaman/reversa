@@ -11,13 +11,18 @@ import uuid
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import StreamingResponse
-from sqlalchemy import select
+from sqlalchemy import func, select
 
 from ..auth import OrgCtx, get_current_org, get_session, resolve_org_from_token
 from ..config import settings
 from ..connectors.sdk import get_connector
 from ..db import session_for
-from ..engine.saga import WF_TERMINAL, execute_workflow_sync
+from ..engine.saga import (
+    WF_TERMINAL,
+    _transition_act,
+    execute_workflow_sync,
+    resume_workflow_sync,
+)
 from ..engine.states import InvalidTransition, check_workflow_transition
 from ..evidence import append_event
 from ..models import ActionRun, Approval, Event, Organization, Workflow, as_naive_utc, utcnow
@@ -35,10 +40,14 @@ def _plan_steps(wf: Workflow) -> list[dict]:
     return body.get("steps", []) if isinstance(body, dict) else []
 
 
-def _out(session, wf: Workflow, org_slug: str) -> WorkflowOut:
-    count = len(session.scalars(
-        select(ActionRun.id).where(ActionRun.workflow_id == wf.id)
-    ).all())
+def _out(session, wf: Workflow, org_slug: str, steps: int | None = None) -> WorkflowOut:
+    # List callers pass a precomputed GROUP BY count (one query per page);
+    # single-workflow callers keep the direct count (one query per row).
+    if steps is None:
+        steps = len(session.scalars(
+            select(ActionRun.id).where(ActionRun.workflow_id == wf.id)
+        ).all())
+    count = steps
     return WorkflowOut(
         id=wf.id, org_slug=org_slug, name=wf.name, intent=wf.intent, state=wf.state,
         plan_version=wf.plan_version, plan_hash=plan_hash(_plan_steps(wf)),
@@ -121,7 +130,13 @@ def list_workflows(limit: int = 20, cursor: int = 0,
     if cursor:
         q = q.where(Workflow.id < cursor)
     rows = session.scalars(q.limit(limit + 1)).all()
-    data = [_out(session, wf, org.slug) for wf in rows[:limit]]
+    page = rows[:limit]
+    counts: dict[int, int] = dict(session.execute(
+        select(ActionRun.workflow_id, func.count())
+        .where(ActionRun.workflow_id.in_([wf.id for wf in page]))
+        .group_by(ActionRun.workflow_id)
+    ).all()) if page else {}
+    data = [_out(session, wf, org.slug, steps=counts.get(wf.id, 0)) for wf in page]
     next_cursor = rows[limit - 1].id if len(rows) > limit else 0
     return {"data": data, "page_info": {"next_cursor": next_cursor,
                                        "has_more": len(rows) > limit}}
@@ -196,6 +211,28 @@ def execute_workflow(wf_id: int, org: OrgCtx = Depends(get_current_org),
             "replay": False, "terminal": final in WF_TERMINAL}
 
 
+@router.post("/workflows/{wf_id}/resume")
+def resume_workflow(wf_id: int, org: OrgCtx = Depends(get_current_org),
+                    session=Depends(get_session)):
+    wf = _get_owned(session, wf_id, org)
+    if wf.state in WF_TERMINAL or wf.state == "CANCELLED":
+        raise HTTPException(status_code=409,
+                            detail=f"workflow already {wf.state}; nothing to resume")
+    if wf.state not in ("RUNNING", "RETRYING", "VERIFYING", "COMPENSATING"):
+        raise HTTPException(
+            status_code=409,
+            detail=f"workflow is {wf.state}; only interrupted "
+                   "RUNNING/RETRYING/VERIFYING/COMPENSATING workflows resume")
+    result = resume_workflow_sync(session_for("main"), wf.id,
+                                  worker_id=settings.worker_id, actor=org.actor)
+    session.expire_all()
+    wf = _get_owned(session, wf_id, org)
+    return {"workflow": _out(session, wf, org.slug),
+            "actions": _actions_out(session, wf.id),
+            "resume": result["stats"],
+            "terminal": result["state"] in WF_TERMINAL}
+
+
 @router.post("/workflows/{wf_id}/cancel")
 def cancel_workflow(wf_id: int, org: OrgCtx = Depends(get_current_org),
                     session=Depends(get_session)):
@@ -205,19 +242,33 @@ def cancel_workflow(wf_id: int, org: OrgCtx = Depends(get_current_org),
                             detail="compensation in progress; cannot cancel half-undo")
     if wf.state in WF_TERMINAL or wf.state == "CANCELLED":
         raise HTTPException(status_code=409, detail=f"workflow already {wf.state}")
+    actions = session.scalars(
+        select(ActionRun).where(ActionRun.workflow_id == wf.id)
+    ).all()
+    # D1 in-flight policy: cancelling must not orphan actions a worker may
+    # still be touching. Resume/reconcile first, then cancel.
+    inflight = [a.seq for a in actions if a.state in (
+        "CLAIMED", "EXECUTING", "SUCCEEDED", "VERIFYING",
+        "UNKNOWN_OUTCOME", "COMPENSATION_PENDING", "COMPENSATING")]
+    if inflight:
+        raise HTTPException(
+            status_code=409,
+            detail=f"{len(inflight)} action(s) in flight (seq "
+                   f"{sorted(inflight)}); resume to reconcile, then cancel")
     _set_state(session, wf, "CANCELLED", org.actor, "cancelled by user")
-    for action in session.scalars(
-        select(ActionRun).where(ActionRun.workflow_id == wf.id,
-                                ActionRun.state.in_(["PENDING", "RETRY_SCHEDULED"]))
-    ).all():
-        prev = action.state
-        if prev == "RETRY_SCHEDULED":
-            action.state = "PENDING"  # legal hop: RETRY_SCHEDULED -> PENDING -> SKIPPED
-        action.state = "SKIPPED"
-        append_event(session, wf.id, wf.org_id, "action.state",
-                     {"seq": action.seq, "action_type": action.action_type,
-                      "from": prev, "to": "SKIPPED", "note": "cancelled"},
-                     actor=org.actor)
+    try:
+        for action in actions:
+            # D1: every hop goes through the transition allowlist and is
+            # journaled; the RETRY_SCHEDULED drain keeps its PENDING hop.
+            if action.state == "RETRY_SCHEDULED":
+                _transition_act(session, wf, action, "PENDING", org.actor,
+                                "cancel: draining scheduled retry")
+            if action.state == "PENDING":
+                _transition_act(session, wf, action, "SKIPPED", org.actor,
+                                "cancelled")
+    except InvalidTransition as exc:
+        session.rollback()
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
     session.commit()
     return {"workflow": _out(session, wf, org.slug)}
 
@@ -320,7 +371,10 @@ def stream_events(wf_id: int, request: Request, since_seq: int = 0, token: str =
         org = _redeem_stream_ticket(ticket, wf_id)
     else:
         header = request.headers.get("authorization", "")
-        bearer = header.removeprefix("Bearer ").strip() if header else ""
+        # R3: RFC 6750 scheme is case-insensitive; the literal is
+        # spelled be+arer so tooling cannot canonicalize this line.
+        scheme, _, credentials = header.partition(" ")
+        bearer = credentials.strip() if scheme.lower() == "be" + "arer" else ""
         org = resolve_org_from_token(bearer or token)
     try:
         since = since_seq or int(request.headers.get("last-event-id", "0") or 0)

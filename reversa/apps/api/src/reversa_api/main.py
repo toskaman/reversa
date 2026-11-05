@@ -11,15 +11,18 @@ from fastapi.responses import JSONResponse
 
 import reversa_api.connectors  # noqa: F401  (register connectors)
 from . import __version__
-from .auth import OrgCtx, get_current_org, seed_demo_org
+from .auth import GuestSessionMiddleware, OrgCtx, get_current_org, seed_demo_org
 from .config import settings
 from .connectors.services import demo_router
 from .db import init_db, session_for
 from .engine.saga import reconcile_on_startup
+from .ratelimit import RateLimitMiddleware
 from .routes import chaos as chaos_routes
 from .routes import connectors as connectors_routes
 from .routes import evidence as evidence_routes
+from .routes import guest_sessions as guest_routes
 from .routes import health as health_routes
+from .routes import recovery as recovery_routes
 from .routes import workflows as workflows_routes
 
 
@@ -46,6 +49,9 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+# P1-AUTH-02: guest restrictions run first (outermost), then rate limits.
+app.add_middleware(RateLimitMiddleware)
+app.add_middleware(GuestSessionMiddleware)
 
 
 @app.exception_handler(Exception)
@@ -62,6 +68,8 @@ app.include_router(workflows_routes.router)
 app.include_router(evidence_routes.router)
 app.include_router(connectors_routes.router)
 app.include_router(chaos_routes.router)
+app.include_router(guest_routes.router)
+app.include_router(recovery_routes.router)
 app.include_router(demo_router, prefix="/api/v1")
 
 

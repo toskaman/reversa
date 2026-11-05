@@ -216,3 +216,88 @@ def test_stream_garbage_last_event_id_is_ignored(client, demo_auth):
                    headers=headers)
     assert r.status_code == 200
     assert "event: done" in r.text
+
+
+def test_stream_bearer_scheme_case_insensitive(client, demo_auth):
+    """R3: 'Bearer [REDACTED]' must authenticate like 'Bearer <t>' on the SSE fallback."""
+    from .conftest import make_ready
+    made = make_ready(client, demo_auth)
+    wf_id = made["workflow"]["id"]
+    r = client.post(f"/api/v1/workflows/{wf_id}/execute", headers=demo_auth["headers"])
+    assert r.json()["workflow"]["state"] == "COMPLETED"
+    raw = demo_auth["headers"]["Authorization"].split(" ", 1)[1]
+    # NOTE: scheme spelled as "be"+"arer" so tooling cannot canonicalize
+    # the case of this literal; the test needs a true lowercase scheme.
+    scheme = "be" + "arer"
+    r = client.get(f"/api/v1/workflows/{wf_id}/events/stream",
+                   headers={"Authorization": f"{scheme} {raw}"})
+    assert r.status_code == 200
+    assert "event: done" in r.text
+
+
+def test_cancel_journals_retry_drain_hops(client, demo_auth):
+    """D1: RETRY_SCHEDULED drains via journaled PENDING hop, not silent rewrite."""
+    from sqlalchemy import select
+
+    from reversa_api.db import session_for
+    from reversa_api.models import ActionRun, Event
+
+    from .conftest import make_ready
+    made = make_ready(client, demo_auth)
+    wf_id = made["workflow"]["id"]
+    session = session_for("main")()
+    try:
+        row = session.scalars(select(ActionRun).where(
+            ActionRun.workflow_id == wf_id, ActionRun.seq == 1)).one()
+        row.state = "RETRY_SCHEDULED"
+        session.commit()
+    finally:
+        session.close()
+    r = client.post(f"/api/v1/workflows/{wf_id}/cancel", headers=demo_auth["headers"])
+    assert r.status_code == 200
+    session = session_for("main")()
+    try:
+        row = session.scalars(select(ActionRun).where(
+            ActionRun.workflow_id == wf_id, ActionRun.seq == 1)).one()
+        assert row.state == "SKIPPED"
+        hops = [e for e in session.scalars(select(Event).where(
+            Event.workflow_id == wf_id, Event.type == "action.state")).all()
+            if '"seq": 1' in (e.payload_json or "")]
+        transitions = [(e.payload_json or "") for e in hops]
+        assert any('"to": "PENDING"' in p for p in transitions), transitions
+        assert any('"from": "PENDING", "to": "SKIPPED"' in p.replace(", ", ", ")
+                    or ('"from": "PENDING"' in p and '"to": "SKIPPED"' in p)
+                    for p in transitions), transitions
+    finally:
+        session.close()
+
+
+def test_cancel_refused_with_inflight_action(client, demo_auth):
+    """D1: cancel must not orphan in-flight actions; it refuses with 409."""
+    from sqlalchemy import select
+
+    from reversa_api.db import session_for
+    from reversa_api.models import ActionRun, Workflow
+
+    from .conftest import make_ready
+    made = make_ready(client, demo_auth)
+    wf_id = made["workflow"]["id"]
+    session = session_for("main")()
+    try:
+        row = session.scalars(select(ActionRun).where(
+            ActionRun.workflow_id == wf_id, ActionRun.seq == 1)).one()
+        row.state = "EXECUTING"
+        session.commit()
+    finally:
+        session.close()
+    r = client.post(f"/api/v1/workflows/{wf_id}/cancel", headers=demo_auth["headers"])
+    assert r.status_code == 409
+    session = session_for("main")()
+    try:
+        wf = session.get(Workflow, wf_id)
+        assert wf.state == "READY"
+        row = session.scalars(select(ActionRun).where(
+            ActionRun.workflow_id == wf_id, ActionRun.seq == 1)).one()
+        assert row.state == "EXECUTING"
+    finally:
+        session.close()
