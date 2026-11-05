@@ -11,8 +11,9 @@ from __future__ import annotations
 
 import json
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 
+from ..auth import OrgCtx, get_current_org
 from ..db import session_for
 from ..models import DemoResource
 from .sdk import (
@@ -574,14 +575,20 @@ demo_router = APIRouter(prefix="/demo", tags=["demo-services"])
 
 
 @demo_router.get("/{service}/resources")
-def list_demo_resources(service: str, org_id: int, kind: str | None = None,
-                        status: str | None = None):
-    """Query a demo service state independently (evidence: before/during/after)."""
+def list_demo_resources(service: str, org: OrgCtx = Depends(get_current_org),
+                        kind: str | None = None, status: str | None = None):
+    """Query a demo service state independently (evidence: before/during/after).
+
+    P0-SEC-01: the org always comes from the auth context. A client-supplied
+    org_id is never accepted (IDOR/cross-tenant leak); unknown query params
+    such as a legacy org_id are ignored by FastAPI.
+    """
     if service not in SERVICE_STORES:
         raise HTTPException(status_code=404, detail=f"unknown demo service {service}")
     return {
         "service": service,
-        "resources": DemoStore(SERVICE_STORES[service]).list(org_id, kind=kind, status=status),
+        "resources": DemoStore(SERVICE_STORES[service]).list(
+            org.org_id, kind=kind, status=status),
     }
 
 

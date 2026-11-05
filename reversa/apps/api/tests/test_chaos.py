@@ -3,6 +3,12 @@
 from .conftest import INTENT, make_ready
 
 
+def _action_transitions(events: list, action_type: str) -> list:
+    return [e["payload"].get("to") for e in events
+            if e["type"] == "action.state"
+            and e["payload"].get("action_type") == action_type]
+
+
 def test_billing_failure_compensates_everything(client, demo_auth):
     r = client.post("/api/v1/demo/chaos",
                     json={"target_connector": "demo-billing", "fault": "http500",
@@ -61,3 +67,80 @@ def test_concurrent_modification_blocks_compensation(client, demo_auth):
     from reversa_api.connectors.sdk import PreconditionFailed
     with pytest.raises(PreconditionFailed):
         store.set_status(row["id"], expected_version=999, status="archived")
+
+
+def test_lost_response_retries_idempotently(client, demo_auth):
+    """Lost response (chaos crash, uncertain) -> UNKNOWN -> reconcile absent
+    -> exactly one safe retry -> COMPLETED."""
+    r = client.post("/api/v1/demo/chaos",
+                    json={"target_connector": "demo-crm",
+                          "target_action": "crm.validate_customer",
+                          "fault": "crash", "times": 1},
+                    headers=demo_auth["headers"])
+    assert r.status_code == 201, r.text
+    made = make_ready(client, demo_auth)
+    wf_id = made["workflow"]["id"]
+    r = client.post(f"/api/v1/workflows/{wf_id}/execute", headers=demo_auth["headers"])
+    assert r.json()["workflow"]["state"] == "COMPLETED", r.text
+    r = client.get(f"/api/v1/workflows/{wf_id}/events", params={"limit": 500},
+                   headers=demo_auth["headers"])
+    events = r.json()["data"]
+    trail = _action_transitions(events, "crm.validate_customer")
+    assert "UNKNOWN_OUTCOME" in trail, trail
+    # One uncertain attempt plus exactly one retry, then verified.
+    assert trail.count("EXECUTING") == 2, trail
+    assert trail[-1] == "VERIFIED", trail
+    assert "chaos.injected" in [e["type"] for e in events]
+
+
+def test_verifier_down_stays_unknown_then_resumes(client, demo_auth, monkeypatch):
+    """A verifier error must never count as absence proof.
+
+    While the verifier is down the uncertain action stays UNKNOWN_OUTCOME
+    (no failure, no retry, no re-execution) and the run honestly reports a
+    non-terminal state; after the verifier recovers the same run resumes to
+    COMPLETED.
+    """
+    from reversa_api.connectors.sdk import ConnectorError, get_connector
+    from reversa_api.db import session_for
+    from reversa_api.engine.saga import execute_workflow_sync
+
+    r = client.post("/api/v1/demo/chaos",
+                    json={"target_connector": "demo-crm",
+                          "target_action": "crm.validate_customer",
+                          "fault": "crash", "times": 1},
+                    headers=demo_auth["headers"])
+    assert r.status_code == 201, r.text
+    made = make_ready(client, demo_auth)
+    wf_id = made["workflow"]["id"]
+
+    crm = get_connector("demo-crm")
+    real_verify = crm.verify
+
+    def flaky_verify(ctx, contract, inputs, output):
+        if contract.action_type == "crm.validate_customer":
+            raise ConnectorError("VERIFY_TIMEOUT", "simulated verifier outage",
+                                 retryable=True)
+        return real_verify(ctx, contract, inputs, output)
+
+    monkeypatch.setattr(crm, "verify", flaky_verify)
+    r = client.post(f"/api/v1/workflows/{wf_id}/execute", headers=demo_auth["headers"])
+    assert r.status_code == 200, r.text
+    body = r.json()
+    assert body["workflow"]["state"] == "RUNNING", body["workflow"]
+    assert body["terminal"] is False
+    by_type = {a["action_type"]: a for a in body["actions"]}
+    assert by_type["crm.validate_customer"]["state"] == "UNKNOWN_OUTCOME", by_type
+    r = client.get(f"/api/v1/workflows/{wf_id}/events", params={"limit": 500},
+                   headers=demo_auth["headers"])
+    events = r.json()["data"]
+    trail = _action_transitions(events, "crm.validate_customer")
+    # Uncertain, then deferred: never failed, never retried, never re-ran.
+    # (Claims journal as action.claimed, not action.state, hence no CLAIMED.)
+    assert trail == ["EXECUTING", "UNKNOWN_OUTCOME"], trail
+    assert "action.reconcile_indeterminate" in [e["type"] for e in events]
+
+    # Verifier recovers: the same run resumes (absent -> retry -> verified).
+    monkeypatch.setattr(crm, "verify", real_verify)
+    assert execute_workflow_sync(session_for("main"), wf_id,
+                                 worker_id="worker-2") == "COMPLETED"

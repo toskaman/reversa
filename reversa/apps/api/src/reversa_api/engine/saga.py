@@ -11,6 +11,7 @@ import datetime as dt
 import json
 import random
 import time
+from enum import Enum
 
 from sqlalchemy import select, update
 
@@ -42,6 +43,68 @@ WF_TERMINAL = {
     "CANCELLED",
 }
 ACT_FORWARD_DONE = {"VERIFIED", "SKIPPED", "COMPENSATED"}
+
+
+class VerificationOutcome(str, Enum):
+    """Typed verification verdict (P0-REC-01).
+
+    Maps to docs/product/recovery-proof-engine.md section 2 effect states:
+    PRESENT -> PRESENT, ABSENT_CONFIRMED -> ABSENT, INDETERMINATE -> UNKNOWN.
+    """
+
+    PRESENT = "PRESENT"
+    ABSENT_CONFIRMED = "ABSENT_CONFIRMED"
+    INDETERMINATE = "INDETERMINATE"
+
+
+def _lease_is_stale(action: ActionRun, now: dt.datetime) -> bool:
+    """True when no live worker can own this action.
+
+    A missing lease carries no ownership claim, so it counts as stale.
+    """
+    return action.lease_expires_at is None or action.lease_expires_at < now
+
+
+def _verify_effect(
+    org: Organization, wf: Workflow, action: ActionRun
+) -> tuple[VerificationOutcome, str]:
+    """Verify one action's effect. Never raises, never guesses.
+
+    TRUE from a clean verify call -> PRESENT; FALSE from a clean call ->
+    ABSENT_CONFIRMED; anything else (verifier raised or crashed, unknown
+    connector/contract, unreadable stored state, non-boolean answer) ->
+    INDETERMINATE. A verifier error is never absence proof.
+    """
+    try:
+        inputs = json.loads(action.input_json or "{}")
+    except (ValueError, TypeError) as exc:
+        return VerificationOutcome.INDETERMINATE, f"unreadable inputs: {exc}"
+    if not isinstance(inputs, dict):
+        return VerificationOutcome.INDETERMINATE, "stored inputs have no verifiable shape"
+    try:
+        prior = json.loads(action.output_json or "{}")
+    except (ValueError, TypeError) as exc:
+        return VerificationOutcome.INDETERMINATE, f"unreadable stored output: {exc}"
+    probe = prior.get("output", prior) if isinstance(prior, dict) else prior
+    if not isinstance(probe, dict):
+        return VerificationOutcome.INDETERMINATE, "stored output has no verifiable shape"
+    try:
+        connector = get_connector(action.connector_id)
+        contract = connector.contract_for(action.action_type)
+        present = connector.verify(_ctx(org, wf, action), contract, inputs, probe)
+    except ConnectorError as exc:
+        return VerificationOutcome.INDETERMINATE, f"verifier error {exc.code}: {exc}"
+    except Exception as exc:  # noqa: BLE001 - a verifier crash proves nothing
+        return VerificationOutcome.INDETERMINATE, (
+            f"verifier crashed ({type(exc).__name__}): {exc}"
+        )
+    if present is True:
+        return VerificationOutcome.PRESENT, "effect confirmed present"
+    if present is False:
+        return VerificationOutcome.ABSENT_CONFIRMED, "effect confirmed absent"
+    return VerificationOutcome.INDETERMINATE, (
+        f"verifier returned non-boolean {type(present).__name__}"
+    )
 
 
 def _transition_wf(session, wf: Workflow, new: str, actor: str, note: str = "") -> None:
@@ -227,33 +290,110 @@ def _run_claimed(session, wf: Workflow, org: Organization, action: ActionRun,
 
 
 def _reconcile_unknown(session, wf: Workflow, org: Organization, action: ActionRun,
-                       worker_id: str) -> None:
-    """UNKNOWN_OUTCOME -> VERIFYING -> VERIFIED (confirmed, no re-execution) or FAILED."""
-    _transition_act(session, wf, action, "VERIFYING", worker_id, "reconciling outcome")
-    session.commit()
-    inputs = json.loads(action.input_json or "{}")
-    ctx = _ctx(org, wf, action)
-    try:
-        connector = get_connector(action.connector_id)
-        contract = connector.contract_for(action.action_type)
-        prior = json.loads(action.output_json or "{}")
-        ok = connector.verify(ctx, contract, inputs, prior.get("output", prior))
-    except ConnectorError as exc:
-        ok = False
-        action.error = f"reconcile error {exc.code}: {exc}"
-    if ok:
+                       worker_id: str) -> VerificationOutcome:
+    """Reconcile an UNKNOWN_OUTCOME with typed tri-state verification (P0-REC-01).
+
+    PRESENT -> VERIFIED (confirmed, no re-execution); ABSENT_CONFIRMED ->
+    FAILED (+ retry when attempts remain); INDETERMINATE -> stays
+    UNKNOWN_OUTCOME (deferred; a verifier error must never count as absence
+    proof, so the action is never failed or retried on that basis).
+    """
+    outcome, detail = _verify_effect(org, wf, action)
+    if outcome is VerificationOutcome.PRESENT:
         action.error = ""
+        _transition_act(session, wf, action, "VERIFYING", worker_id, "reconciling outcome")
         _transition_act(session, wf, action, "VERIFIED", worker_id,
                         "effect confirmed; no re-execution")
-    else:
-        action.error = action.error or "effect absent; idempotent re-execution allowed"
+    elif outcome is VerificationOutcome.ABSENT_CONFIRMED:
+        action.error = "effect absent; idempotent re-execution allowed"
         _transition_act(session, wf, action, "FAILED", worker_id, action.error)
         if action.attempt < action.max_attempts:
             _transition_act(session, wf, action, "RETRY_SCHEDULED", worker_id,
                             "reconciled absent; safe idempotent retry")
             if wf.state == "RUNNING":
                 _transition_wf(session, wf, "RETRYING", worker_id, "retry scheduled")
+    else:
+        action.error = f"reconcile deferred: {detail}; awaiting verifier"
+        append_event(
+            session, wf.id, wf.org_id, "action.reconcile_indeterminate",
+            {"seq": action.seq, "action_type": action.action_type, "detail": detail},
+            actor=worker_id,
+        )
     session.commit()
+    return outcome
+
+
+def _resume_interrupted_verification(session, wf: Workflow, org: Organization,
+                                     action: ActionRun,
+                                     worker_id: str) -> VerificationOutcome:
+    """Resume a SUCCEEDED/VERIFYING action left by a crash (P0-REC-02).
+
+    Verifies in place; never re-executes. PRESENT -> VERIFIED,
+    ABSENT_CONFIRMED -> FAILED (+ retry when attempts remain),
+    INDETERMINATE -> stays VERIFYING (deferred until the verifier answers).
+    """
+    if action.state == "SUCCEEDED":
+        _transition_act(session, wf, action, "VERIFYING", worker_id,
+                        "resume: success was durable, confirmation was not")
+    outcome, detail = _verify_effect(org, wf, action)
+    if outcome is VerificationOutcome.PRESENT:
+        action.error = ""
+        _transition_act(session, wf, action, "VERIFIED", worker_id,
+                        f"resume: {detail}; no re-execution")
+    elif outcome is VerificationOutcome.ABSENT_CONFIRMED:
+        action.error = f"resume: {detail}; idempotent re-execution allowed"
+        _transition_act(session, wf, action, "FAILED", worker_id, action.error)
+        if action.attempt < action.max_attempts:
+            _transition_act(session, wf, action, "RETRY_SCHEDULED", worker_id,
+                            f"attempt {action.attempt}/{action.max_attempts}")
+            if wf.state == "RUNNING":
+                _transition_wf(session, wf, "RETRYING", worker_id, "retry scheduled")
+    else:
+        action.error = f"resume deferred: {detail}"
+        append_event(
+            session, wf.id, wf.org_id, "action.verify_indeterminate",
+            {"seq": action.seq, "action_type": action.action_type, "detail": detail},
+            actor=worker_id,
+        )
+    session.commit()
+    return outcome
+
+
+def _resume_interrupted_compensation(session, wf: Workflow, org: Organization,
+                                     action: ActionRun,
+                                     worker_id: str) -> VerificationOutcome:
+    """Resume a COMPENSATING action left by a crash (P0-REC-02).
+
+    Re-reads the forward effect; never assumes the undo happened.
+    ABSENT_CONFIRMED -> COMPENSATED (the undo demonstrably took effect
+    before the crash), PRESENT -> COMPENSATION_FAILED (effect still there;
+    needs (re-)compensation), INDETERMINATE -> stays COMPENSATING.
+    """
+    outcome, detail = _verify_effect(org, wf, action)
+    if outcome is VerificationOutcome.ABSENT_CONFIRMED:
+        try:
+            output = json.loads(action.output_json or "{}")
+        except ValueError:
+            output = {}
+        if isinstance(output, dict):
+            output["_comp_proof"] = {"resumed_after_crash": True, "verify_detail": detail}
+            action.output_json = json.dumps(output)
+        action.error = ""
+        _transition_act(session, wf, action, "COMPENSATED", worker_id,
+                        f"resume: {detail}; undo took effect before the crash")
+    elif outcome is VerificationOutcome.PRESENT:
+        action.error = (f"resume: {detail}; effect still present,"
+                        " re-compensation required")
+        _transition_act(session, wf, action, "COMPENSATION_FAILED", worker_id, action.error)
+    else:
+        action.error = f"resume deferred: {detail}"
+        append_event(
+            session, wf.id, wf.org_id, "action.compensation_indeterminate",
+            {"seq": action.seq, "action_type": action.action_type, "detail": detail},
+            actor=worker_id,
+        )
+    session.commit()
+    return outcome
 
 
 def _deps_status(session, wf: Workflow, action: ActionRun) -> str:
@@ -316,26 +456,37 @@ def _start_compensation(session, wf: Workflow, org: Organization,
                 )
         elif action.state in ("SUCCEEDED", "VERIFYING"):
             # Effect may exist: verify once, then compensate or drop.
-            inputs = json.loads(action.input_json or "{}")
-            try:
-                connector = get_connector(action.connector_id)
-                contract = connector.contract_for(action.action_type)
-                output = json.loads(action.output_json or "{}")
-                ok = connector.verify(_ctx(org, wf, action), contract, inputs, output)
-            except ConnectorError:
-                ok = False
+            # A verifier error is never absence proof: when the world cannot
+            # be read, the effect is assumed present (fail closed) so it is
+            # either compensated or escalated to a human, never dropped.
+            outcome, detail = _verify_effect(org, wf, action)
             if action.state == "SUCCEEDED":
                 _transition_act(session, wf, action, "VERIFYING", worker_id,
                                 "late verification before compensation")
-            if ok and action.compensation_capability in COMPENSATABLE_CAPS:
-                _transition_act(session, wf, action, "VERIFIED", worker_id,
-                                "late verification before compensation")
+            assume_present = outcome is not VerificationOutcome.ABSENT_CONFIRMED
+            if assume_present and action.compensation_capability in COMPENSATABLE_CAPS:
+                if outcome is VerificationOutcome.PRESENT:
+                    note = "late verification before compensation"
+                else:
+                    note = f"effect unprovable ({detail}); assuming present for safety"
+                _transition_act(session, wf, action, "VERIFIED", worker_id, note)
                 _transition_act(session, wf, action, "COMPENSATION_PENDING", worker_id,
                                 "queued for compensation")
                 queued += 1
+            elif assume_present:
+                manual += 1
+                _transition_act(session, wf, action, "VERIFIED", worker_id,
+                                f"effect may exist ({detail}); needs a human")
+                append_event(
+                    session, wf.id, wf.org_id, "compensation.manual_required",
+                    {"seq": action.seq, "action_type": action.action_type,
+                     "capability": action.compensation_capability,
+                     "reason": "effect present or unprovable; not automatically reversible"},
+                    actor=worker_id,
+                )
             else:
                 _transition_act(session, wf, action, "FAILED", worker_id,
-                                "unverifiable at compensation time")
+                                f"effect confirmed absent ({detail}); nothing to undo")
                 _transition_act(session, wf, action, "SKIPPED", worker_id,
                                 "no confirmed effect to undo")
     append_event(
@@ -412,20 +563,44 @@ def _pump_forward(session, wf: Workflow, org: Organization, worker_id: str,
         _transition_act(session, wf, action, "UNKNOWN_OUTCOME", worker_id,
                         "owner gone; outcome uncertain")
     session.commit()
+    # Crash leftovers: SUCCEEDED/VERIFYING with a stale lease never confirmed
+    # their effect (P0-REC-02). Resume each with verification; indeterminate
+    # ones defer without blocking independent work.
+    for action in session.scalars(
+        select(ActionRun).where(
+            ActionRun.workflow_id == wf.id,
+            ActionRun.state.in_(["SUCCEEDED", "VERIFYING"]),
+        )
+    ).all():
+        if not _lease_is_stale(action, utcnow()):
+            continue  # a live worker may still own it
+        if _resume_interrupted_verification(session, wf, org, action, worker_id) is not (
+            VerificationOutcome.INDETERMINATE
+        ):
+            return True
     actions = session.scalars(
         select(ActionRun).where(ActionRun.workflow_id == wf.id).order_by(ActionRun.seq)
     ).all()
     # 1. Reconcile unknown outcomes before re-executing any external effect.
+    # Indeterminate unknowns stay UNKNOWN (P0-REC-01): they defer without
+    # blocking independent work, but compensation waits for them (step 2).
+    saw_indeterminate = False
     for action in actions:
         if action.state == "UNKNOWN_OUTCOME":
-            _reconcile_unknown(session, wf, org, action, worker_id)
+            outcome = _reconcile_unknown(session, wf, org, action, worker_id)
+            if outcome is VerificationOutcome.INDETERMINATE:
+                saw_indeterminate = True
+                continue
             return True
-    # 2. Exhausted failure -> start compensation.
-    for action in actions:
-        if action.state == "FAILED":
-            _start_compensation(session, wf, org, worker_id,
-                                f"seq {action.seq} {action.action_type}: {action.error}")
-            return True
+    # 2. Exhausted failure -> start compensation (deferred while any outcome is
+    # still unknown: never compensate around an unverified effect, or the
+    # uncertain action would be orphaned by the compensation run).
+    if not saw_indeterminate:
+        for action in actions:
+            if action.state == "FAILED":
+                _start_compensation(session, wf, org, worker_id,
+                                    f"seq {action.seq} {action.action_type}: {action.error}")
+                return True
     # 3. Execute the next ready action.
     for action in actions:
         if action.state != "PENDING":
@@ -471,6 +646,20 @@ def _pump_forward(session, wf: Workflow, org: Organization, worker_id: str,
 
 
 def _pump_compensation(session, wf: Workflow, org: Organization, worker_id: str) -> bool:
+    # Crash leftovers: COMPENSATING with a stale lease never confirmed the
+    # undo (P0-REC-02). Resume each by re-reading the forward effect.
+    for action in session.scalars(
+        select(ActionRun).where(
+            ActionRun.workflow_id == wf.id,
+            ActionRun.state == "COMPENSATING",
+        )
+    ).all():
+        if not _lease_is_stale(action, utcnow()):
+            continue  # a live worker may still own it
+        if _resume_interrupted_compensation(session, wf, org, action, worker_id) is not (
+            VerificationOutcome.INDETERMINATE
+        ):
+            return True
     actions = session.scalars(
         select(ActionRun).where(ActionRun.workflow_id == wf.id)
         .order_by(ActionRun.seq.desc())
@@ -541,9 +730,29 @@ def execute_workflow_sync(session_factory, workflow_id: int, worker_id: str = "w
 
 
 def reconcile_on_startup(session_factory, worker_id: str) -> dict:
-    """Recover in-flight work after a crash. Returns stats. Never blindly retries."""
+    """Recover in-flight work after a crash. Returns stats. Never blindly retries.
+
+    Per-state audit (P0-REC-02):
+    - CLAIMED with an expired lease -> PENDING (no effect ever started).
+    - EXECUTING with an expired lease -> UNKNOWN_OUTCOME (effect uncertain;
+      the forward pump reconciles it with verification before any
+      re-execution). Fresh leases are left alone in both cases.
+    - SUCCEEDED / VERIFYING with a stale lease -> verified in place
+      (PRESENT -> VERIFIED with no re-execution, ABSENT_CONFIRMED -> FAILED
+      plus a retry when attempts remain, INDETERMINATE -> left VERIFYING
+      for a later pass). A blind FAILED here would permit an unsafe retry
+      of a possibly-present effect.
+    - UNKNOWN_OUTCOME -> deliberately left for the pump, which reconciles
+      every UNKNOWN with verification before any forward progress; counted
+      as reconcile_pending. Never force-resolved.
+    - COMPENSATING with a stale lease -> forward effect re-read
+      (ABSENT_CONFIRMED -> COMPENSATED, PRESENT -> COMPENSATION_FAILED so
+      the undo is retried, INDETERMINATE -> left COMPENSATING).
+    """
     session = session_factory()
-    stats = {"requeued": 0, "unknown": 0, "failed": 0, "comp_failed": 0}
+    stats = {"requeued": 0, "unknown": 0, "failed": 0, "comp_failed": 0,
+             "verified": 0, "compensated": 0, "deferred": 0,
+             "reconcile_pending": 0, "live": 0}
     try:
         now = utcnow()
         for action in session.scalars(
@@ -563,20 +772,46 @@ def reconcile_on_startup(session_factory, worker_id: str) -> dict:
             _transition_act(session, wf, action, "UNKNOWN_OUTCOME", worker_id,
                             "startup: owner crashed mid-effect")
             stats["unknown"] += 1
+        session.commit()
         for action in session.scalars(
-            select(ActionRun).where(ActionRun.state == "VERIFYING")
+            select(ActionRun).where(ActionRun.state.in_(["SUCCEEDED", "VERIFYING"]))
         ).all():
+            if not _lease_is_stale(action, utcnow()):
+                stats["live"] += 1
+                continue
             wf = session.get(Workflow, action.workflow_id)
-            _transition_act(session, wf, action, "FAILED", worker_id,
-                            "startup: verification interrupted; idempotent retry allowed")
-            stats["failed"] += 1
+            org = session.get(Organization, wf.org_id) if wf is not None else None
+            if wf is None or org is None:
+                stats["deferred"] += 1
+                continue
+            outcome = _resume_interrupted_verification(session, wf, org, action, worker_id)
+            if outcome is VerificationOutcome.PRESENT:
+                stats["verified"] += 1
+            elif outcome is VerificationOutcome.ABSENT_CONFIRMED:
+                stats["failed"] += 1
+            else:
+                stats["deferred"] += 1
+        stats["reconcile_pending"] = len(session.scalars(
+            select(ActionRun).where(ActionRun.state == "UNKNOWN_OUTCOME")
+        ).all())
         for action in session.scalars(
             select(ActionRun).where(ActionRun.state == "COMPENSATING")
         ).all():
+            if not _lease_is_stale(action, utcnow()):
+                stats["live"] += 1
+                continue
             wf = session.get(Workflow, action.workflow_id)
-            _transition_act(session, wf, action, "COMPENSATION_FAILED", worker_id,
-                            "startup: compensation interrupted")
-            stats["comp_failed"] += 1
+            org = session.get(Organization, wf.org_id) if wf is not None else None
+            if wf is None or org is None:
+                stats["deferred"] += 1
+                continue
+            outcome = _resume_interrupted_compensation(session, wf, org, action, worker_id)
+            if outcome is VerificationOutcome.ABSENT_CONFIRMED:
+                stats["compensated"] += 1
+            elif outcome is VerificationOutcome.PRESENT:
+                stats["comp_failed"] += 1
+            else:
+                stats["deferred"] += 1
         session.commit()
         return stats
     finally:

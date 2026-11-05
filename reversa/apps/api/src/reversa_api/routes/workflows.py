@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import datetime as dt
 import json
+import secrets
+import threading
 import time
 import uuid
 
@@ -18,7 +20,7 @@ from ..db import session_for
 from ..engine.saga import WF_TERMINAL, execute_workflow_sync
 from ..engine.states import InvalidTransition, check_workflow_transition
 from ..evidence import append_event
-from ..models import ActionRun, Approval, Event, Workflow, as_naive_utc, utcnow
+from ..models import ActionRun, Approval, Event, Organization, Workflow, as_naive_utc, utcnow
 from ..planner import plan_from_intent, plan_hash, validate_plan
 from ..schemas import ActionOut, ApproveIn, EventOut, IntentIn, PreviewOut, WorkflowOut
 
@@ -257,13 +259,73 @@ def list_events(wf_id: int, since_seq: int = 0, limit: int = 100,
                               prev_hash=e.prev_hash, hash=e.hash) for e in rows]}
 
 
+# P1-SSE-01: short-lived single-use connection tickets for SSE.
+# EventSource cannot send headers, so the long-lived API token must not travel
+# as ?token= (URL leaks into logs/history). Clients mint a ticket over an
+# authenticated call, then open the stream with ?ticket=. Tickets are opaque,
+# bound to one (org, workflow), expire quickly, and are consumed on first use.
+# ?token= remains as a deprecated fallback until the web client migrates.
+# NOTE: in-memory store = single-process only. Multi-worker deployments need a
+# shared store (DB/Redis) before removing the ?token= fallback.
+SSE_TICKET_TTL_SECONDS = 30
+_SSE_TICKETS: dict[str, dict] = {}
+_SSE_TICKETS_LOCK = threading.Lock()
+
+
+def _purge_expired_tickets(now: float) -> None:
+    expired = [t for t, v in _SSE_TICKETS.items() if v["expires_at"] <= now]
+    for t in expired:
+        del _SSE_TICKETS[t]
+
+
+def _redeem_stream_ticket(ticket: str, wf_id: int) -> OrgCtx:
+    now = time.time()
+    with _SSE_TICKETS_LOCK:
+        _purge_expired_tickets(now)
+        entry = _SSE_TICKETS.pop(ticket, None)
+    if entry is None:
+        raise HTTPException(status_code=403, detail="invalid or expired stream ticket")
+    if entry["wf_id"] != wf_id:
+        raise HTTPException(status_code=403, detail="stream ticket is bound to another workflow")
+    session = session_for("main")()
+    try:
+        org_row = session.get(Organization, entry["org_id"])
+        if org_row is None:
+            raise HTTPException(status_code=403, detail="orphaned stream ticket")
+        return OrgCtx(org_id=org_row.id, slug=org_row.slug,
+                      is_demo=bool(org_row.is_demo), actor="stream-ticket")
+    finally:
+        session.close()
+
+
+@router.post("/workflows/{wf_id}/stream-ticket", status_code=201)
+def mint_stream_ticket(wf_id: int, org: OrgCtx = Depends(get_current_org),
+                       session=Depends(get_session)):
+    # _get_owned returns 404 for cross-tenant workflows: no oracle, no leak.
+    _get_owned(session, wf_id, org)
+    ticket = secrets.token_urlsafe(32)
+    with _SSE_TICKETS_LOCK:
+        _purge_expired_tickets(time.time())
+        _SSE_TICKETS[ticket] = {"org_id": org.org_id, "wf_id": wf_id,
+                                "expires_at": time.time() + SSE_TICKET_TTL_SECONDS}
+    return {"ticket": ticket, "expires_in": SSE_TICKET_TTL_SECONDS}
+
+
 @router.get("/workflows/{wf_id}/events/stream")
-def stream_events(wf_id: int, request: Request, since_seq: int = 0, token: str = ""):
-    # EventSource cannot send headers: accept ?token= on this route only.
-    header = request.headers.get("authorization", "")
-    bearer = header.removeprefix("Bearer ").strip() if header else ""
-    org = resolve_org_from_token(bearer or token)
-    since = since_seq or int(request.headers.get("last-event-id", "0") or 0)
+def stream_events(wf_id: int, request: Request, since_seq: int = 0, token: str = "",
+                  ticket: str = ""):
+    # Preferred: single-use ?ticket=. Deprecated fallback: ?token= (this route
+    # only) until the web client migrates to tickets.
+    if ticket:
+        org = _redeem_stream_ticket(ticket, wf_id)
+    else:
+        header = request.headers.get("authorization", "")
+        bearer = header.removeprefix("Bearer ").strip() if header else ""
+        org = resolve_org_from_token(bearer or token)
+    try:
+        since = since_seq or int(request.headers.get("last-event-id", "0") or 0)
+    except (TypeError, ValueError):
+        since = since_seq or 0
 
     def gen():
         last = since

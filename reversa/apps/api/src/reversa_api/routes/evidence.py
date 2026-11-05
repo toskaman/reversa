@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import html
 import json
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -76,27 +77,30 @@ def export_evidence(wf_id: int, format: str = "json",
 
 
 def _render_html(bundle: dict) -> str:
+    # F-02: every interpolated value is untrusted (names, intents, payloads,
+    # actors) and must be HTML-escaped; the export is opened in browsers.
+    esc = lambda v: html.escape(str(v), quote=True)
     rows = "".join(
-        f"<tr><td>{e['seq']}</td><td>{e['ts']}</td><td><code>{e['type']}</code></td>"
-        f"<td>{e['actor']}</td><td><code>{json.dumps(e['payload'])[:220]}</code></td>"
-        f"<td><code>{e['hash'][:12]}…</code></td></tr>"
+        f"<tr><td>{e['seq']}</td><td>{esc(e['ts'])}</td><td><code>{esc(e['type'])}</code></td>"
+        f"<td>{esc(e['actor'])}</td><td><code>{esc(json.dumps(e['payload'])[:220])}</code></td>"
+        f"<td><code>{esc(e['hash'][:12])}…</code></td></tr>"
         for e in bundle["events"]
     )
     actions = "".join(
-        f"<tr><td>{a['seq']}</td><td><code>{a['action_type']}</code></td>"
-        f"<td>{a['connector_id']}</td><td><b>{a['state']}</b></td>"
-        f"<td>{a['attempt']}/{a['max_attempts']}</td><td>{a['compensation_capability']}</td></tr>"
+        f"<tr><td>{a['seq']}</td><td><code>{esc(a['action_type'])}</code></td>"
+        f"<td>{esc(a['connector_id'])}</td><td><b>{esc(a['state'])}</b></td>"
+        f"<td>{a['attempt']}/{a['max_attempts']}</td><td>{esc(a['compensation_capability'])}</td></tr>"
         for a in bundle["actions"]
     )
     wf = bundle["workflow"]
     chain = bundle["chain"]
-    badge = "VALID" if chain["valid"] else f"INVALID ({chain['message']})"
+    badge = "VALID" if chain["valid"] else f"INVALID ({esc(chain['message'])})"
     return f"""<!DOCTYPE html><html lang="en"><head><meta charset="utf-8">
-<title>REVERSA Evidence — {wf['name']}</title>
+<title>REVERSA Evidence — {esc(wf['name'])}</title>
 <style>body{{background:#0A0E14;color:#E6EBF2;font:14px system-ui}}table{{border-collapse:collapse;width:100%}}td,th{{border:1px solid #1A2230;padding:6px 8px;text-align:left}}code{{color:#22D3EE}}.badge{{padding:4px 12px;border-radius:8px;background:#6366F1}}</style>
 </head><body><h1>REVERSA Evidence Passport</h1>
-<p><b>{wf['name']}</b> — state <b>{wf['state']}</b> — chain <span class="badge">{badge}</span></p>
-<p>Exported {bundle['exported_at']} by {bundle['generator']}.</p>
+<p><b>{esc(wf['name'])}</b> — state <b>{esc(wf['state'])}</b> — chain <span class="badge">{badge}</span></p>
+<p>Exported {esc(bundle['exported_at'])} by {esc(bundle['generator'])}.</p>
 <h2>Actions</h2><table><tr><th>#</th><th>Action</th><th>Connector</th><th>State</th><th>Try</th><th>Compensation</th></tr>{actions}</table>
 <h2>Timeline</h2><table><tr><th>#</th><th>Time</th><th>Event</th><th>Actor</th><th>Payload</th><th>Hash</th></tr>{rows}</table>
 </body></html>"""

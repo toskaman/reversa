@@ -22,6 +22,12 @@ def hash_token(token: str) -> str:
     return hashlib.sha256(token.encode("utf-8")).hexdigest()
 
 
+# P1-AUTH-01 hardening: cap accepted credential length so a hostile or
+# corrupted Authorization header / ?token= value cannot force hashing and
+# lookup of unbounded input. Real tokens are ~40 chars; 512 is generous.
+_MAX_TOKEN_LEN = 512
+
+
 @dataclass
 class OrgCtx:
     org_id: int
@@ -41,12 +47,15 @@ def get_session():
 def resolve_org_from_token(token: str) -> OrgCtx:
     if not token:
         raise HTTPException(status_code=401, detail="missing bearer token")
+    if len(token) > _MAX_TOKEN_LEN:
+        raise HTTPException(status_code=403, detail="invalid token")
+    candidate = hash_token(token)
     session = session_for("main")()
     try:
         row = session.scalar(
-            select(ApiToken).where(ApiToken.token_hash == hash_token(token))
+            select(ApiToken).where(ApiToken.token_hash == candidate)
         )
-        if row is None:
+        if row is None or not secrets.compare_digest(row.token_hash, candidate):
             raise HTTPException(status_code=403, detail="invalid token")
         org = session.get(Organization, row.org_id)
         if org is None:
@@ -58,8 +67,13 @@ def resolve_org_from_token(token: str) -> OrgCtx:
 
 
 def get_current_org(authorization: str = Header("")) -> OrgCtx:
-    token = authorization.removeprefix("Bearer ").strip() if authorization else ""
-    return resolve_org_from_token(token)
+    # Strict scheme parsing (P1-AUTH-01): only "Bearer <credentials>" is
+    # accepted (RFC 6750, case-insensitive scheme). Missing or malformed
+    # credentials map to 401 via the empty-credential path below.
+    scheme, _, credentials = (authorization or "").partition(" ")
+    if scheme.lower() != "bearer" or not credentials.strip():
+        return resolve_org_from_token("")
+    return resolve_org_from_token(credentials.strip())
 
 
 def seed_demo_org() -> tuple[Organization, str | None]:

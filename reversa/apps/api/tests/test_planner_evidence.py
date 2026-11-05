@@ -64,3 +64,26 @@ def test_evidence_chain_and_tamper(fresh_db, demo_auth):
 def test_redact_nested():
     assert redact({"api_key": "x", "deep": {"password": "y", "ok": 1}}) == {
         "api_key": "***REDACTED***", "deep": {"password": "***REDACTED***", "ok": 1}}
+
+
+def test_html_export_escapes_untrusted_content():
+    """F-02: hostile workflow/event content must never render as raw HTML."""
+    from reversa_api.routes.evidence import _render_html
+    hostile = "<script>alert('xss')</script><img src=x onerror=alert(1)>"
+    bundle = {
+        "generator": "reversa/test", "exported_at": "2026-01-01T00:00:00",
+        "workflow": {"id": 1, "name": hostile, "state": "COMPLETED"},
+        "actions": [{"seq": 1, "action_type": hostile, "connector_id": "demo-crm",
+                     "state": "VERIFIED", "attempt": 1, "max_attempts": 3,
+                     "compensation_capability": "FULLY_REVERSIBLE"}],
+        "events": [{"seq": 1, "ts": "2026-01-01T00:00:00", "type": "note",
+                    "actor": hostile, "payload": {"msg": hostile},
+                    "hash": "ab" * 32}],
+        "chain": {"valid": True, "message": "ok"},
+    }
+    html = _render_html(bundle)
+    assert "<script>" not in html
+    assert "<img src=x" not in html
+    assert "onerror=alert(1)>" not in html
+    assert "&lt;script&gt;" in html
+    assert "VALID" in html
