@@ -42,12 +42,14 @@ def test_owner_can_mint_guest_session(client, demo_auth):
     delta = (dt.datetime.fromisoformat(body["expires_at"])
              - dt.datetime.now(dt.timezone.utc)).total_seconds()
     assert GUEST_TTL_SECONDS - 120 < delta <= GUEST_TTL_SECONDS
-    # Guest credential resolves to the demo org with a guest actor.
+    # Guest credential resolves to its OWN ephemeral org with a guest actor.
     r = client.get("/api/v1/me",
                    headers=_guest_auth(body)["headers"])
     assert r.status_code == 200
     me = r.json()
-    assert me["org_slug"] == demo_auth["slug"]
+    assert body["org_slug"].startswith("guest-")
+    assert me["org_slug"] == body["org_slug"]
+    assert me["org_slug"] != demo_auth["slug"]
     assert me["is_demo"] is True
     assert me["actor"] == f"guest:{body['session_id']}"
 
@@ -121,7 +123,8 @@ def test_expired_guest_rejected(client, demo_auth):
     assert r.status_code == 403
 
 
-def test_guest_demo_org_only_isolation(client, demo_auth, real_auth):
+def test_guest_per_session_org_isolation(client, demo_auth, real_auth):
+    """Per-session ephemeral orgs: a guest sees neither real nor owner-demo rows."""
     r = client.post("/api/v1/intents", json={"intent": INTENT, "use_ai": False},
                     headers=real_auth["headers"])
     real_wf = r.json()["workflow"]["id"]
@@ -131,7 +134,7 @@ def test_guest_demo_org_only_isolation(client, demo_auth, real_auth):
                       headers=guest["headers"]).status_code == 404
     r = client.get(f"/api/v1/workflows/{made['workflow']['id']}",
                    headers=guest["headers"])
-    assert r.status_code == 200
+    assert r.status_code == 404
 
 
 def test_rotation_overlap_mint_then_revoke(client, demo_auth):
@@ -341,3 +344,29 @@ def test_c3_expired_guest_execute_rejected_403(client, demo_auth):
     r = client.post(f"/api/v1/workflows/{made['workflow']['id']}/execute",
                     headers=guest["headers"])
     assert r.status_code == 403  # expired: auth rejection, never 410/500
+
+
+def test_v41_concurrent_intents_admit_exactly_quota(client, demo_auth):
+    """V4-1: racing intents against max M admit exactly M (410 for rest)."""
+    import threading
+
+    body = _mint(client, demo_auth, max_workflows=3, max_executes=1)
+    headers = _guest_auth(body)["headers"]
+    results = []
+    barrier = threading.Barrier(9)
+
+    def fire():
+        barrier.wait(timeout=10)
+        r = client.post("/api/v1/intents",
+                        json={"intent": INTENT, "use_ai": False},
+                        headers=headers)
+        results.append(r.status_code)
+
+    threads = [threading.Thread(target=fire) for _ in range(9)]
+    for t in threads:
+        t.start()
+    for t in threads:
+        t.join(timeout=60)
+    assert not any(t.is_alive() for t in threads)
+    assert sorted(results).count(201) == 3, results
+    assert set(results) <= {201, 410}, results

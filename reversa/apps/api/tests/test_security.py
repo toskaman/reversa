@@ -168,11 +168,11 @@ def test_stream_ticket_single_use_flow(client, demo_auth):
     # Forged ticket rejected.
     r = client.get(stream_url, params={"ticket": "forged-ticket-value"})
     assert r.status_code == 403
-    # Deprecated ?token= fallback still works during web migration.
+    # Removed fallback: a valid credential smuggled via ?token=
+    # authenticates nothing (no header, no ticket -> 401/403).
     raw = demo_auth["headers"]["Authorization"].split(" ", 1)[1]
     r = client.get(stream_url, params={"token": raw})
-    assert r.status_code == 200
-    assert "event: done" in r.text
+    assert r.status_code in (401, 403)
 
 
 def test_stream_ticket_bound_to_workflow(client, demo_auth):
@@ -209,10 +209,9 @@ def test_stream_garbage_last_event_id_is_ignored(client, demo_auth):
     wf_id = made["workflow"]["id"]
     r = client.post(f"/api/v1/workflows/{wf_id}/execute", headers=demo_auth["headers"])
     assert r.json()["workflow"]["state"] == "COMPLETED"
-    raw = demo_auth["headers"]["Authorization"].split(" ", 1)[1]
     headers = {"Authorization": demo_auth["headers"]["Authorization"],
                "Last-Event-ID": "not-a-number"}
-    r = client.get(f"/api/v1/workflows/{wf_id}/events/stream?token={raw}",
+    r = client.get(f"/api/v1/workflows/{wf_id}/events/stream",
                    headers=headers)
     assert r.status_code == 200
     assert "event: done" in r.text
@@ -301,3 +300,44 @@ def test_cancel_refused_with_inflight_action(client, demo_auth):
         assert row.state == "EXECUTING"
     finally:
         session.close()
+
+
+# --- cycle 4: ?token= removal, evidence format contract, helper promotion ---
+
+
+def test_stream_token_query_param_does_not_authenticate(client, demo_auth):
+    """A ?token= value (even a valid credential) must not open the stream."""
+    from .conftest import make_ready
+    made = make_ready(client, demo_auth)
+    wf_id = made["workflow"]["id"]
+    r = client.post(f"/api/v1/workflows/{wf_id}/execute", headers=demo_auth["headers"])
+    assert r.json()["workflow"]["state"] == "COMPLETED"
+    raw = demo_auth["headers"]["Authorization"].split(" ", 1)[1]
+    r = client.get(f"/api/v1/workflows/{wf_id}/events/stream",
+                   params={"token": raw})
+    assert r.status_code in (401, 403)
+    # Header auth on the same stream still works.
+    r = client.get(f"/api/v1/workflows/{wf_id}/events/stream",
+                   headers=demo_auth["headers"])
+    assert r.status_code == 200
+    assert "event: done" in r.text
+
+
+def test_evidence_unknown_format_rejected_422(client, demo_auth):
+    """Unknown ?format= is a client error, not a silent JSON fallback."""
+    from .conftest import make_ready
+    made = make_ready(client, demo_auth)
+    wf_id = made["workflow"]["id"]
+    r = client.get(f"/api/v1/workflows/{wf_id}/evidence",
+                   params={"format": "xml"}, headers=demo_auth["headers"])
+    assert r.status_code == 422
+    r = client.get(f"/api/v1/workflows/{wf_id}/evidence",
+                   params={"format": "json"}, headers=demo_auth["headers"])
+    assert r.status_code == 200
+    assert "chain" in r.json()
+
+
+def test_transition_action_promoted_to_public_helper():
+    import reversa_api.engine.saga as saga
+    assert callable(saga.transition_action)
+    assert not hasattr(saga, "_transition_act")

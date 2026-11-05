@@ -1,4 +1,11 @@
-"""Recovery Proof Engine v1: manifest endpoint + evaluator units."""
+"""Recovery Proof Engine v1: manifest endpoint + evaluator units.
+
+Endpoint tests pin clean C5/C6 runs, R4 refusal, the C0 tamper cap, and C7
+divergence. Unit tests pin C1 (missing/uncertain/partial records), C2
+(dangling refs), C3 (capability/external manual work, UNKNOWN fail-closed,
+C1>C3 and C3>C4 dominance), C4 exhaustion, and verdict honesty (recorded
+vs re-verified vs never-inferred).
+"""
 
 from reversa_api.db import session_for
 from reversa_api.models import DemoResource, Event
@@ -272,3 +279,205 @@ def test_unit_external_modification_orders_manual_work():
     assert m["confidence_criteria"]["rule"] == "C3"
     assert m["manual_items"][0]["cause"] == "external_modification"
     assert m["refusals"][0]["code"] == "R_EXTERNAL_MODIFICATION"
+
+
+def test_unit_uncertain_failure_is_indeterminate():
+    from reversa_api.routes.recovery import evaluate_recovery
+    action = {"seq": 5, "action_type": "billing.create_profile",
+              "connector_id": "demo-billing", "state": "FAILED",
+              "output": {}, "error": "timeout waiting for connector verify",
+              "attempt": 1, "compensation_capability": "COMPENSATABLE"}
+    events = [_ev(1, "action.state", {"seq": 5}, note_to="FAILED")]
+    m = evaluate_recovery(**_base_kwargs(workflow_state="FAILED",
+                                         actions=[action], events=events))
+    assert m["actions"][0]["effect_state"] == "UNKNOWN"
+    assert m["actions"][0]["verdict"] == "INDETERMINATE"
+    assert m["recovery_confidence"] == "INDETERMINATE"
+    assert m["confidence_criteria"]["rule"] == "C1"
+    assert m["confidence_criteria"]["evaluated"]["refs_resolve"] is True
+    assert len(m["indeterminate"]) == 1
+
+
+def test_unit_failed_partial_effect_is_indeterminate():
+    from reversa_api.routes.recovery import evaluate_recovery
+    action = {"seq": 6, "action_type": "billing.create_profile",
+              "connector_id": "demo-billing", "state": "FAILED",
+              "output": {"partial": True},
+              "error": "verify error: reconcile deferred",
+              "attempt": 2, "compensation_capability": "COMPENSATABLE"}
+    events = [
+        _ev(1, "action.state", {"seq": 6}, note_to="SUCCEEDED"),
+        _ev(2, "action.state", {"seq": 6}, note_to="VERIFYING"),
+        _ev(3, "action.state", {"seq": 6}, note_to="FAILED"),
+    ]
+    m = evaluate_recovery(**_base_kwargs(workflow_state="FAILED",
+                                         actions=[action], events=events))
+    assert m["actions"][0]["effect_state"] == "UNKNOWN"
+    assert m["actions"][0]["verdict"] == "INDETERMINATE"
+    assert m["recovery_confidence"] == "INDETERMINATE"
+    assert m["confidence_criteria"]["rule"] == "C1"
+
+
+def test_unit_dangling_ref_is_indeterminate():
+    from reversa_api.routes.recovery import evaluate_recovery
+    action = {"seq": 10, "action_type": "notify.send_summary",
+              "connector_id": "demo-notify", "state": "VERIFIED",
+              "output": {"resource": {"store": "notify", "kind": "message",
+                                      "name": "7:email", "id": 1, "version": 1}},
+              "error": "", "attempt": 1,
+              "compensation_capability": "IRREVERSIBLE"}
+    events = [
+        _ev(1, "workflow.created"),
+        _ev(2, "action.state", {"seq": 10}, note_to="VERIFIED"),
+        _ev(3, "compensation.started", {"queued": 0, "manual_items": 1}),
+    ]
+    row = {"id": 1, "kind": "message", "name": "7:email", "status": "active",
+           "version": 1, "data": {"sent": True}}
+    m = evaluate_recovery(
+        **_base_kwargs(actions=[action], events=events,
+                       read_resource=lambda store, rid: dict(row)))
+    assert m["confidence_criteria"]["evaluated"]["refs_resolve"] is False
+    assert m["manual_items"][0]["event_ref"] is None
+    assert m["recovery_confidence"] == "INDETERMINATE"
+    assert m["confidence_criteria"]["rule"] == "C2"
+
+
+def test_unit_unknown_capability_fails_closed_to_manual():
+    from reversa_api.routes.recovery import evaluate_recovery
+    action = {"seq": 9, "action_type": "crm.tag_vip",
+              "connector_id": "demo-crm", "state": "VERIFIED",
+              "output": {"resource": {"store": "crm", "kind": "tag",
+                                      "name": "vip", "id": 2, "version": 1}},
+              "error": "", "attempt": 1,
+              "compensation_capability": "UNKNOWN"}
+    events = [
+        _ev(1, "workflow.created"),
+        _ev(2, "action.state", {"seq": 9}, note_to="VERIFIED"),
+        _ev(3, "compensation.started", {"queued": 0, "manual_items": 1}),
+        _ev(4, "compensation.manual_required", {"seq": 9}),
+    ]
+    row = {"id": 2, "kind": "tag", "name": "vip", "status": "active",
+           "version": 1, "data": {}}
+    m = evaluate_recovery(
+        **_base_kwargs(actions=[action], events=events,
+                       read_resource=lambda store, rid: dict(row)))
+    assert m["recovery_confidence"] == "MANUAL_REQUIRED"
+    assert m["confidence_criteria"]["rule"] == "C3"
+    assert m["actions"][0]["effect_state"] == "PRESENT"
+    assert m["actions"][0]["verdict"] == "NOT_RESTORED"
+    assert m["manual_items"][0]["cause"] == "capability_refusal"
+    assert m["refusals"][0]["code"] == "R_CAPABILITY_REFUSAL"
+
+
+def test_unit_ignorance_dominates_actionability():
+    from reversa_api.routes.recovery import evaluate_recovery
+    unknown = {"seq": 5, "action_type": "billing.create_profile",
+               "connector_id": "demo-billing", "state": "FAILED",
+               "output": {}, "error": "timeout waiting for connector verify",
+               "attempt": 1, "compensation_capability": "COMPENSATABLE"}
+    manual = {"seq": 10, "action_type": "notify.send_summary",
+              "connector_id": "demo-notify", "state": "VERIFIED",
+              "output": {"resource": {"store": "notify", "kind": "message",
+                                      "name": "7:email", "id": 1, "version": 1}},
+              "error": "", "attempt": 1,
+              "compensation_capability": "IRREVERSIBLE"}
+    events = [
+        _ev(1, "action.state", {"seq": 5}, note_to="FAILED"),
+        _ev(2, "action.state", {"seq": 10}, note_to="VERIFIED"),
+        _ev(3, "compensation.started", {"queued": 0, "manual_items": 1}),
+        _ev(4, "compensation.manual_required", {"seq": 10}),
+    ]
+    row = {"id": 1, "kind": "message", "name": "7:email", "status": "active",
+           "version": 1, "data": {"sent": True}}
+    m = evaluate_recovery(
+        **_base_kwargs(actions=[unknown, manual], events=events,
+                       read_resource=lambda store, rid: dict(row)))
+    assert m["confidence_criteria"]["evaluated"]["refs_resolve"] is True
+    assert len(m["manual_items"]) == 1  # still enumerated, but dominated
+    assert m["recovery_confidence"] == "INDETERMINATE"
+    assert m["confidence_criteria"]["rule"] == "C1"
+
+
+def test_unit_actionability_dominates_exhaustion():
+    from reversa_api.routes.recovery import evaluate_recovery
+    exhausted = {"seq": 2, "action_type": "crm.create_organization",
+                 "connector_id": "demo-crm", "state": "COMPENSATION_FAILED",
+                 "output": {"resource": {"store": "crm", "kind": "organization",
+                                         "name": "acme", "id": 1, "version": 1},
+                            "_comp_attempts": 3},
+                 "error": "CHAOS_HTTP500: chaos (retryable=True)", "attempt": 1,
+                 "compensation_capability": "COMPENSATABLE"}
+    manual = {"seq": 10, "action_type": "notify.send_summary",
+              "connector_id": "demo-notify", "state": "VERIFIED",
+              "output": {"resource": {"store": "notify", "kind": "message",
+                                      "name": "7:email", "id": 1, "version": 1}},
+              "error": "", "attempt": 1,
+              "compensation_capability": "IRREVERSIBLE"}
+    events = [
+        _ev(1, "action.state", {"seq": 2}, note_to="VERIFIED"),
+        _ev(2, "action.state", {"seq": 10}, note_to="VERIFIED"),
+        _ev(3, "compensation.started", {"queued": 1, "manual_items": 1}),
+        _ev(4, "action.state", {"seq": 2}, note_to="COMPENSATION_FAILED"),
+        _ev(5, "compensation.manual_required", {"seq": 10}),
+    ]
+
+    def _read(store, rid):
+        if store == "notify":
+            return {"id": 1, "kind": "message", "name": "7:email",
+                    "status": "active", "version": 1, "data": {"sent": True}}
+        return {"id": 1, "kind": "organization", "name": "acme",
+                "status": "active", "version": 1, "data": {}}
+
+    m = evaluate_recovery(**_base_kwargs(actions=[exhausted, manual],
+                                         events=events, read_resource=_read))
+    assert m["confidence_criteria"]["evaluated"]["exhausted_compensations"] == 1
+    assert len(m["manual_items"]) == 1
+    assert m["recovery_confidence"] == "MANUAL_REQUIRED"
+    assert m["confidence_criteria"]["rule"] == "C3"
+
+
+def test_unit_missing_verify_never_inferred_present():
+    from reversa_api.routes.recovery import evaluate_recovery
+    action = {"seq": 3, "action_type": "identity.create_workspace",
+              "connector_id": "demo-identity", "state": "VERIFIED",
+              "output": {"resource": {"store": "identity", "kind": "workspace",
+                                      "name": "acme", "id": 9, "version": 1}},
+              "error": "", "attempt": 1,
+              "compensation_capability": "FULLY_REVERSIBLE"}
+    row = {"id": 9, "kind": "workspace", "name": "acme", "status": "active",
+           "version": 1, "data": {}}
+    m = evaluate_recovery(**_base_kwargs(workflow_state="COMPLETED",
+                                         actions=[action], events=[],
+                                         read_resource=lambda s, r: dict(row)))
+    assert m["actions"][0]["effect_state"] == "UNKNOWN"
+    assert m["actions"][0]["verdict"] == "INDETERMINATE"
+    assert m["recovery_confidence"] == "INDETERMINATE"
+    assert m["confidence_criteria"]["rule"] == "C1"
+
+
+def test_unit_recorded_compensation_downgraded_by_present_row():
+    from reversa_api.routes.recovery import evaluate_recovery
+    action = {"seq": 2, "action_type": "crm.create_organization",
+              "connector_id": "demo-crm", "state": "COMPENSATED",
+              "output": {"resource": {"store": "crm", "kind": "organization",
+                                      "name": "acme", "id": 1, "version": 1}},
+              "error": "", "attempt": 1,
+              "compensation_capability": "COMPENSATABLE"}
+    events = [
+        _ev(1, "action.state", {"seq": 2}, note_to="VERIFIED"),
+        _ev(2, "compensation.started", {"queued": 1, "manual_items": 0}),
+        _ev(3, "action.state", {"seq": 2}, note_to="COMPENSATING"),
+        _ev(4, "action.state", {"seq": 2}, note_to="COMPENSATED"),
+    ]
+    row = {"id": 1, "kind": "organization", "name": "acme",
+           "status": "active", "version": 1, "data": {}}
+    m = evaluate_recovery(
+        **_base_kwargs(workflow_state="COMPENSATED", actions=[action],
+                       events=events,
+                       read_resource=lambda store, rid: dict(row)))
+    assert m["actions"][0]["effect_state"] == "PRESENT"
+    assert m["actions"][0]["verdict"] == "NOT_RESTORED"
+    assert len(m["divergences"]) == 1
+    assert m["divergences"][0]["expected"] == "ABSENT"
+    assert m["recovery_confidence"] == "INDETERMINATE"
+    assert m["confidence_criteria"]["rule"] == "C7"

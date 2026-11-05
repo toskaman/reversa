@@ -71,6 +71,10 @@ def export_evidence(wf_id: int, format: str = "json",
     wf = session.get(Workflow, wf_id)
     if wf is None or wf.org_id != org.org_id:
         raise HTTPException(status_code=404, detail="workflow not found")
+    if format not in ("json", "html"):
+        raise HTTPException(
+            status_code=422,
+            detail=f"unsupported format {format!r}; use 'json' or 'html'")
     bundle = _bundle(session, wf, org.slug)
     if format == "html":
         return HTMLResponse(_render_html(bundle))

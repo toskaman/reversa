@@ -6,6 +6,7 @@ import { api } from "../../lib/api";
 import type { Workflow } from "../../lib/types";
 import TimeMachine from "../../components/Recovery/TimeMachine";
 import DecisionInspector from "../../components/Recovery/DecisionInspector";
+import ManifestPanel from "../../components/Recovery/ManifestPanel";
 
 const RECOVERY = new Set(["COMPENSATING", "COMPENSATED", "PARTIALLY_COMPENSATED",
   "MANUAL_REQUIRED", "FAILED"]);
@@ -31,8 +32,9 @@ export default function TimeMachinePage() {
     <div>
       <h1>Time Machine</h1>
       <p className="sub">One run, split into BEFORE / FAILURE / AFTER from its
-        real event stream — plus the AI decision behind the plan. Compare
-        runs in <Link href="/recovery-race">Recovery Race</Link>.</p>
+        real event stream — plus the AI decision behind the plan and the
+        Recovery Proof Engine verdict. Compare
+        runs in <Link href="/recovery-race">Execution Comparison</Link>.</p>
       {error && <div className="err">{error}</div>}
       <label>Run</label>
       <select value={id ?? ""} onChange={(e) =>
@@ -46,6 +48,8 @@ export default function TimeMachinePage() {
         <div>
           <h2>Timeline</h2>
           <TimeMachine workflowId={id} />
+          <h2>Recovery Manifest</h2>
+          <ManifestPanel workflowId={id} />
           <h2>AI Decision Inspector</h2>
           <DecisionInspector workflowId={id} />
         </div>

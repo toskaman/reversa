@@ -70,8 +70,11 @@ function Lane({ label, loaded, error }: {
 /**
  * Side-by-side comparison of two workflow runs. Every cell is derived from
  * the workflows detail + events endpoints; nothing is synthesized.
+ * This is NOT a timed race and NOT a controlled experiment: the two runs
+ * may differ in plan, inputs, and chaos rules, so no winner is declared
+ * and no causal claim is made. Deltas are descriptive only.
  */
-export default function RaceComparison({ idA, idB }: {
+export default function ExecutionComparison({ idA, idB }: {
   idA: number | null; idB: number | null;
 }) {
   const a = useLoaded(idA);
@@ -98,7 +101,8 @@ export default function RaceComparison({ idA, idB }: {
         <div className="card">
           <h2>Action-by-action</h2>
           <p className="muted">Same seq, both runs. States come straight from
-            the actions endpoint.</p>
+            the actions endpoint. Descriptive only — runs are not matched
+            on inputs, so differences are not experiment results.</p>
           <table><thead><tr><th>#</th><th>Run A action</th><th>Run A state</th>
             <th>Run B action</th><th>Run B state</th></tr></thead>
             <tbody>{seqs.map((seq) => {

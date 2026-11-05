@@ -296,14 +296,12 @@ class TestEvidenceNegatives:
         r = client.get(f"/api/v1/workflows/{made['workflow']['id']}/evidence")
         assert r.status_code == 401
 
-    def test_evidence_unknown_format_falls_back_to_json(self, client,
-                                                        demo_auth):
-        # Documents current behavior: any non-html format returns the bundle.
+    def test_evidence_unknown_format_is_rejected(self, client, demo_auth):
+        # Unknown formats are rejected (422), never silently returned as JSON.
         made = make_ready(client, demo_auth)
         r = client.get(f"/api/v1/workflows/{made['workflow']['id']}/evidence",
                        params={"format": "xml"}, headers=demo_auth["headers"])
-        assert r.status_code == 200
-        assert "chain" in r.json()
+        assert r.status_code == 422
 
 
 # --- guest -----------------------------------------------------------------

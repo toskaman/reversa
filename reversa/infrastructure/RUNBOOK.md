@@ -88,11 +88,28 @@ API tokens are per-org hashes in the DB (`scripts/add_token.py`), not env.
 
 ## Rollback
 
+Code rollback (config + images stay on the VM; `.env` is untouched):
+
 ```sh
-git log --oneline -5
+git log --oneline -5                  # pick the last known-good sha
+./scripts/backup.sh                   # safety snapshot BEFORE touching code
 git checkout <previous-sha> -- reversa/apps reversa/infrastructure
 docker compose up -d --build
-./scripts/healthcheck.sh
+./scripts/healthcheck.sh              # must end OK: /healthz 200, / 200, /readyz 200
 ```
 
-For a data-level rollback, restore the matching backup (above) instead.
+Notes:
+
+- The `git checkout <sha> -- <paths>` form updates the working tree + index
+  but not HEAD. To return to the tip afterwards:
+  `git checkout HEAD -- reversa/apps reversa/infrastructure`
+  (or `git reset --hard HEAD` when no other local changes must be kept),
+  then `docker compose up -d --build` + `./scripts/healthcheck.sh` again.
+- Schema is `create_all(checkfirst=True)` (`db.py:init_db`) — there are no
+  down-migrations to run, so a code rollback needs no schema downgrade.
+- If the bad deploy wrote bad data (not just bad code), restore the
+  pre-rollback backup from the step above (see Restore) after the code
+  rollback; code-only rollback does not undo data writes.
+- Prefer roll-forward (fix at HEAD, redeploy via `./scripts/deploy.sh`)
+  when the fix is small; use rollback when prod is red and the fix is
+  not immediate.

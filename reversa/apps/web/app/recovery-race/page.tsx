@@ -4,12 +4,12 @@ import Link from "next/link";
 import { useEffect, useState } from "react";
 import { api } from "../../lib/api";
 import type { Workflow } from "../../lib/types";
-import RaceComparison from "../../components/Recovery/RaceComparison";
+import ExecutionComparison from "../../components/Recovery/ExecutionComparison";
 
 const RECOVERY = new Set(["COMPENSATING", "COMPENSATED", "PARTIALLY_COMPENSATED",
   "MANUAL_REQUIRED", "FAILED"]);
 
-export default function RecoveryRace() {
+export default function ExecutionComparisonPage() {
   const [items, setItems] = useState<Workflow[]>([]);
   const [idA, setIdA] = useState<number | null>(null);
   const [idB, setIdB] = useState<number | null>(null);
@@ -30,9 +30,10 @@ export default function RecoveryRace() {
 
   return (
     <div>
-      <h1>Recovery Race</h1>
+      <h1>Execution Comparison</h1>
       <p className="sub">Two runs, side by side. Compare a failed run against
-        its recovery — or any two runs. Also see{" "}
+        its recovery — or any two runs. Descriptive only: this is not a
+        timed race or a controlled experiment. Also see{" "}
         <Link href="/time-machine">Time Machine</Link>.</p>
       {error && <div className="err">{error}</div>}
       <div className="row">
@@ -57,7 +58,7 @@ export default function RecoveryRace() {
           </select>
         </div>
       </div>
-      <RaceComparison idA={idA} idB={idB} />
+      <ExecutionComparison idA={idA} idB={idB} />
     </div>
   );
 }

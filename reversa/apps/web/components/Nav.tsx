@@ -7,7 +7,7 @@ export default function Nav() {
       <Link href="/">Overview</Link>
       <Link href="/command">Command</Link>
       <Link href="/recovery">Recovery</Link>
-      <Link href="/recovery-race">Recovery Race</Link>
+      <Link href="/recovery-race">Execution Comparison</Link>
       <Link href="/time-machine">Time Machine</Link>
       <Link href="/connectors">Connectors</Link>
       <Link href="/demo-lab">Demo Lab</Link>

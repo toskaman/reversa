@@ -1,16 +1,19 @@
 """Recovery Proof Engine v1: read-only Recovery Manifest evaluator.
 
-Implements docs/product/recovery-proof-engine.md (sections 0-6 incl. section 5
-refusal codes, restored in cycle V2-03; v1 ships R4_NOT_TERMINAL /
-R5_CANCELLED_RUN plus in-manifest R_CAPABILITY_REFUSAL /
-R_EXTERNAL_MODIFICATION).
+Implements docs/product/recovery-proof-engine.md sections 0-6: tri-state
+effect claims (PRESENT/ABSENT/UNKNOWN), verdict truth table, confidence
+C0-C7, and refusal codes R4_NOT_TERMINAL / R5_CANCELLED_RUN plus
+in-manifest R_CAPABILITY_REFUSAL / R_EXTERNAL_MODIFICATION.
 
 Read-only by construction: this module only SELECTs (workflows, actions,
 events, demo-store rows). It never appends events, never retries, never
 compensates, and never calls connector execute/verify/compensate. Every
 claim derives from observed DB state: recorded evidence transitions plus
-current demo-store rows. Current rows can only *downgrade* a recorded claim
-(divergence); they never upgrade a missing record into a proven claim.
+current demo-store rows.
+
+Verdict honesty: recorded transitions establish a claim; current rows only
+re-verify (a mismatch downgrades to a divergence); nothing is inferred —
+a missing record stays UNKNOWN/INDETERMINATE however favourable the store.
 
 Endpoint: GET /api/v1/workflows/{wf_id}/recovery-manifest
 """

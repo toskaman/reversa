@@ -6,6 +6,7 @@ server log (never to any API response). Sessions/cookies are P1.
 
 from __future__ import annotations
 
+import asyncio
 import datetime as dt
 import hashlib
 import re
@@ -137,10 +138,40 @@ GUEST_DEFAULT_MAX_EXECUTES = 10
 GUEST_MAX_WORKFLOWS_LIMIT = 20  # clamp on mint (owner-chosen quota)
 GUEST_MAX_EXECUTES_LIMIT = 50
 
+# Cycle 4 (AGENT-07): true per-session isolation. Every guest session owns an
+# ephemeral demo org (slug "guest-<session_id>", is_demo=1, NO schema change);
+# all existing org_id scoping (workflows, evidence, SSE tickets, chaos rules,
+# demo resources) then isolates sessions automatically. Expiry sweeps the
+# ephemeral org and every row under it; the guard in _sweep_guest_org() makes
+# touching a non-guest org impossible by construction.
+GUEST_ORG_PREFIX = "guest-"
+
+# Strictly-quota-bound PUBLIC mint: fixed tiny quotas, caller cannot override.
+PUBLIC_GUEST_MAX_WORKFLOWS = 2
+PUBLIC_GUEST_MAX_EXECUTES = 2
+
 # token_hash -> {org_id, session_id, expires_at (epoch), max_workflows,
-#                max_executes}
+#                max_executes, ephemeral_org (bool), public (bool)}
 _GUEST_SESSIONS: dict[str, dict] = {}
 _GUEST_LOCK = threading.Lock()
+# V4-1: one asyncio lock per live guest session, serializing quota-checked
+# requests (intent/execute) end to end. asyncio (not threading) because the
+# lock is held across `await self.app(...)`; a threading lock there could
+# freeze the event loop. Entries are dropped with their session on purge.
+_SESSION_LOCKS: dict[str, asyncio.Lock] = {}
+
+
+def _session_lock(session_id: str) -> asyncio.Lock:
+    with _GUEST_LOCK:
+        lock = _SESSION_LOCKS.get(session_id)
+        if lock is None:
+            lock = asyncio.Lock()
+            _SESSION_LOCKS[session_id] = lock
+        return lock
+
+# Best-effort sweep failures from the lazy (request-path) purge, oldest first.
+# The explicit sweep_expired_guests() returns per-org errors instead.
+_LAST_SWEEP_ERRORS: list[str] = []
 
 _NAME_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$")
 
@@ -153,12 +184,118 @@ def reset_guest_state() -> None:
     """Tests only: drop all guest sessions (fresh_db does not cover memory)."""
     with _GUEST_LOCK:
         _GUEST_SESSIONS.clear()
+        _SESSION_LOCKS.clear()
+
+
+def _sweep_guest_org(org_id: int) -> dict:
+    """Delete one ephemeral guest org and every row scoped to it.
+
+    Guard: only an is_demo org whose slug starts with GUEST_ORG_PREFIX is
+    ever deleted; anything else raises without touching the database.
+    Covers main.db (tokens, chaos, workflows + actions/events/approvals),
+    the 5 demo stores (demo_resources by org_id), then the org row itself.
+    """
+    from sqlalchemy import delete  # local: keep import graph acyclic
+
+    from .db import MAIN_STORES
+    from .models import (  # local import: models imports db, not auth
+        ActionRun,
+        ApiToken,
+        Approval,
+        ChaosRule,
+        DemoResource,
+        Event,
+        Organization,
+        Workflow,
+    )
+
+    session = session_for("main")()
+    try:
+        org = session.get(Organization, org_id)
+        if org is None:
+            return {"org_id": org_id, "deleted": False, "reason": "already gone"}
+        if not org.is_demo or not org.slug.startswith(GUEST_ORG_PREFIX):
+            raise ValueError(f"refusing to sweep non-guest org {org.slug!r}")
+        wf_ids = list(session.scalars(
+            select(Workflow.id).where(Workflow.org_id == org_id)).all())
+        counts = {"workflows": len(wf_ids)}
+        if wf_ids:
+            for model, col in ((ActionRun, ActionRun.workflow_id),
+                               (Event, Event.workflow_id),
+                               (Approval, Approval.workflow_id)):
+                res = session.execute(delete(model).where(col.in_(wf_ids)))
+                counts[model.__tablename__] = res.rowcount
+            res = session.execute(
+                delete(Workflow).where(Workflow.org_id == org_id))
+            counts["workflows_deleted"] = res.rowcount
+        for model in (ChaosRule, ApiToken):
+            res = session.execute(
+                delete(model).where(model.org_id == org_id))
+            counts[model.__tablename__] = res.rowcount
+        session.delete(org)
+        session.commit()
+    finally:
+        session.close()
+    demo_counts = {}
+    for store in MAIN_STORES:
+        if store == "main":
+            continue
+        ds = session_for(store)()
+        try:
+            res = ds.execute(
+                delete(DemoResource).where(DemoResource.org_id == org_id))
+            ds.commit()
+            demo_counts[store] = res.rowcount
+        finally:
+            ds.close()
+    return {"org_id": org_id, "deleted": True, "main": counts,
+            "demo": demo_counts}
 
 
 def _purge_expired_guests(now: float) -> None:
-    expired = [h for h, g in _GUEST_SESSIONS.items() if g["expires_at"] <= now]
-    for h in expired:
+    """Drop expired sessions; best-effort sweep of their ephemeral orgs.
+
+    Runs on the request path (under _GUEST_LOCK), so per-org sweep failures
+    are recorded in _LAST_SWEEP_ERRORS instead of breaking authentication.
+    Use sweep_expired_guests() for an explicit, error-reporting sweep.
+    """
+    expired = [(h, g) for h, g in _GUEST_SESSIONS.items()
+               if g["expires_at"] <= now]
+    for h, g in expired:
         del _GUEST_SESSIONS[h]
+        _SESSION_LOCKS.pop(g.get("session_id", ""), None)
+    for _, g in expired:
+        if g.get("ephemeral_org"):
+            try:
+                _sweep_guest_org(g["org_id"])
+            except Exception as exc:  # never break auth on sweep failure
+                _LAST_SWEEP_ERRORS.append(
+                    f"org_id={g['org_id']}: {type(exc).__name__}: {exc}")
+
+
+def sweep_expired_guests() -> dict:
+    """Explicit expiry sweep: purge expired sessions AND delete their orgs.
+
+    Returns {"sessions": n, "swept": [...per-org results...],
+    "errors": [...]}. Only guest-prefixed demo orgs are ever deleted.
+    """
+    now = time.time()
+    with _GUEST_LOCK:
+        expired = [(h, g) for h, g in _GUEST_SESSIONS.items()
+                   if g["expires_at"] <= now]
+        for h, g in expired:
+            del _GUEST_SESSIONS[h]
+            _SESSION_LOCKS.pop(g.get("session_id", ""), None)
+    swept: list[dict] = []
+    errors: list[str] = []
+    for _, g in expired:
+        if not g.get("ephemeral_org"):
+            continue
+        try:
+            swept.append(_sweep_guest_org(g["org_id"]))
+        except Exception as exc:
+            errors.append(f"org_id={g['org_id']}: {type(exc).__name__}: {exc}")
+    return {"sessions": len(expired), "swept": swept, "errors": errors}
 
 
 def _lookup_guest(candidate_hash: str) -> dict | None:
@@ -189,30 +326,76 @@ def require_demo_owner(org: OrgCtx) -> None:
                             detail="guest sessions are restricted to the demo tenant")
 
 
-def mint_guest_session(owner: OrgCtx, *, max_workflows: int = GUEST_DEFAULT_MAX_WORKFLOWS,
-                       max_executes: int = GUEST_DEFAULT_MAX_EXECUTES) -> dict:
-    """Mint a short-lived guest credential bound to the owner's demo org."""
-    require_demo_owner(owner)
-    max_workflows = max(1, min(int(max_workflows), GUEST_MAX_WORKFLOWS_LIMIT))
-    max_executes = max(1, min(int(max_executes), GUEST_MAX_EXECUTES_LIMIT))
+def _create_ephemeral_guest_org(session_id: str) -> Organization:
+    """Insert (and return) the ephemeral demo org for one guest session."""
+    session = session_for("main")()
+    try:
+        slug = f"{GUEST_ORG_PREFIX}{session_id}"
+        if session.scalar(
+                select(Organization).where(Organization.slug == slug)) is not None:
+            raise ValueError(f"guest org slug collision: {slug}")
+        org = Organization(slug=slug, name=f"Guest session {session_id}",
+                           is_demo=1)
+        session.add(org)
+        session.commit()
+        session.refresh(org)
+        session.expunge(org)
+        return org
+    finally:
+        session.close()
+
+
+def _store_guest_session(*, max_workflows: int, max_executes: int,
+                         public: bool) -> dict:
+    """Allocate session id + ephemeral org + credential; store the entry."""
     session_id = secrets.token_hex(8)
+    org = _create_ephemeral_guest_org(session_id)
     credential = GUEST_PREFIX + secrets.token_urlsafe(32)
     expires_at = time.time() + GUEST_TTL_SECONDS
     with _GUEST_LOCK:
         _purge_expired_guests(time.time())
         _GUEST_SESSIONS[hash_token(credential)] = {
-            "org_id": owner.org_id, "session_id": session_id,
+            "org_id": org.id, "session_id": session_id,
             "expires_at": expires_at, "max_workflows": max_workflows,
-            "max_executes": max_executes,
+            "max_executes": max_executes, "ephemeral_org": True,
+            "public": public,
         }
     return {
         "credential": credential,
         "session_id": session_id,
+        "org_slug": org.slug,
         "expires_at": dt.datetime.fromtimestamp(
             expires_at, tz=dt.timezone.utc).isoformat(),
         "max_workflows": max_workflows,
         "max_executes": max_executes,
     }
+
+
+def mint_guest_session(owner: OrgCtx, *, max_workflows: int = GUEST_DEFAULT_MAX_WORKFLOWS,
+                       max_executes: int = GUEST_DEFAULT_MAX_EXECUTES) -> dict:
+    """Mint a short-lived guest credential with its OWN ephemeral demo org.
+
+    Cycle 4: the guest no longer shares the owner's demo org. Every op the
+    guest performs is scoped to the ephemeral org_id, so two sessions (and
+    the owner) are mutually invisible through the existing org_id checks.
+    """
+    require_demo_owner(owner)
+    max_workflows = max(1, min(int(max_workflows), GUEST_MAX_WORKFLOWS_LIMIT))
+    max_executes = max(1, min(int(max_executes), GUEST_MAX_EXECUTES_LIMIT))
+    return _store_guest_session(max_workflows=max_workflows,
+                                max_executes=max_executes, public=False)
+
+
+def mint_public_guest_session() -> dict:
+    """Mint a PUBLIC guest session: no owner credential, fixed tiny quotas.
+
+    Chaos is disabled for the session by the guest-actor middleware deny
+    (same as owner-minted guests); quotas cannot be raised by the caller.
+    Rate limiting is enforced by the route (per-IP fixed window).
+    """
+    return _store_guest_session(
+        max_workflows=PUBLIC_GUEST_MAX_WORKFLOWS,
+        max_executes=PUBLIC_GUEST_MAX_EXECUTES, public=True)
 
 
 def guest_usage(actor: str) -> tuple[int, int]:
@@ -392,15 +575,28 @@ class GuestSessionMiddleware:
                                     False))
             await resp(scope, receive, send)
             return
-        try:
-            if method == "POST" and path == _INTENT_PATH:
-                check_guest_quota(actor, "intent")
-            elif method == "POST" and _EXECUTE_RE.match(path or ""):
-                check_guest_quota(actor, "execute")
-        except HTTPException as exc:
-            resp = JSONResponse(status_code=exc.status_code,
-                                content=_error_body("QUOTA_EXHAUSTED",
-                                                    str(exc.detail), False))
-            await resp(scope, receive, send)
+        # V4-1: hold the per-session lock across quota check AND the
+        # downstream route, so racing requests cannot all pass the check
+        # before any of them lands. Other sessions proceed concurrently.
+        quota_kind = None
+        if method == "POST" and path == _INTENT_PATH:
+            quota_kind = "intent"
+        elif method == "POST" and _EXECUTE_RE.match(path or ""):
+            quota_kind = "execute"
+        if quota_kind is None:
+            await self.app(scope, receive, send)
             return
-        await self.app(scope, receive, send)
+        lock = _session_lock(guest["session_id"])
+        await lock.acquire()
+        try:
+            try:
+                check_guest_quota(actor, quota_kind)
+            except HTTPException as exc:
+                resp = JSONResponse(status_code=exc.status_code,
+                                    content=_error_body("QUOTA_EXHAUSTED",
+                                                        str(exc.detail), False))
+                await resp(scope, receive, send)
+                return
+            await self.app(scope, receive, send)
+        finally:
+            lock.release()

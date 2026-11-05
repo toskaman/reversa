@@ -31,7 +31,7 @@ export default function Roi() {
           <h2>Your hypotheses</h2>
           <label>Workflows per month</label>{num(workflows, setWorkflows, 1)}
           <label>Failure rate (%)</label>{num(failurePct, setFailurePct)}
-          <label>Manual recovery cost per incident ($)</label>{num(costPer, setCostPer)}
+          <label>Manual recovery cost per incident ($, hypothetical)</label>{num(costPer, setCostPer)}
           <label>Recovery time per incident (hours)</label>{num(hoursPer, setHoursPer)}
           <label>Auto-compensated share (%) — default 100% is our measured
             demo-benchmark rate (5 chaos runs, see docs/benchmarks)</label>

@@ -19,9 +19,9 @@ from ..connectors.sdk import get_connector
 from ..db import session_for
 from ..engine.saga import (
     WF_TERMINAL,
-    _transition_act,
     execute_workflow_sync,
     resume_workflow_sync,
+    transition_action,
 )
 from ..engine.states import InvalidTransition, check_workflow_transition
 from ..evidence import append_event
@@ -261,10 +261,10 @@ def cancel_workflow(wf_id: int, org: OrgCtx = Depends(get_current_org),
             # D1: every hop goes through the transition allowlist and is
             # journaled; the RETRY_SCHEDULED drain keeps its PENDING hop.
             if action.state == "RETRY_SCHEDULED":
-                _transition_act(session, wf, action, "PENDING", org.actor,
+                transition_action(session, wf, action, "PENDING", org.actor,
                                 "cancel: draining scheduled retry")
             if action.state == "PENDING":
-                _transition_act(session, wf, action, "SKIPPED", org.actor,
+                transition_action(session, wf, action, "SKIPPED", org.actor,
                                 "cancelled")
     except InvalidTransition as exc:
         session.rollback()
@@ -311,13 +311,13 @@ def list_events(wf_id: int, since_seq: int = 0, limit: int = 100,
 
 
 # P1-SSE-01: short-lived single-use connection tickets for SSE.
-# EventSource cannot send headers, so the long-lived API token must not travel
-# as ?token= (URL leaks into logs/history). Clients mint a ticket over an
-# authenticated call, then open the stream with ?ticket=. Tickets are opaque,
-# bound to one (org, workflow), expire quickly, and are consumed on first use.
-# ?token= remains as a deprecated fallback until the web client migrates.
-# NOTE: in-memory store = single-process only. Multi-worker deployments need a
-# shared store (DB/Redis) before removing the ?token= fallback.
+# EventSource cannot send headers, so the long-lived API token must never
+# travel in the URL (leaks into logs/history): there is no ?token= fallback.
+# Clients mint a ticket over an authenticated call, then open the stream with
+# ?ticket=. Tickets are opaque, bound to one (org, workflow), expire quickly,
+# and are consumed on first use. Header Bearer auth also works (non-browser
+# clients). NOTE: in-memory store = single-process only. Multi-worker
+# deployments need a shared store (DB/Redis).
 SSE_TICKET_TTL_SECONDS = 30
 _SSE_TICKETS: dict[str, dict] = {}
 _SSE_TICKETS_LOCK = threading.Lock()
@@ -363,10 +363,10 @@ def mint_stream_ticket(wf_id: int, org: OrgCtx = Depends(get_current_org),
 
 
 @router.get("/workflows/{wf_id}/events/stream")
-def stream_events(wf_id: int, request: Request, since_seq: int = 0, token: str = "",
+def stream_events(wf_id: int, request: Request, since_seq: int = 0,
                   ticket: str = ""):
-    # Preferred: single-use ?ticket=. Deprecated fallback: ?token= (this route
-    # only) until the web client migrates to tickets.
+    # Auth: single-use ?ticket= (browsers) or Authorization header
+    # (non-browser clients). A ?token= query value is NOT honored.
     if ticket:
         org = _redeem_stream_ticket(ticket, wf_id)
     else:
@@ -375,7 +375,7 @@ def stream_events(wf_id: int, request: Request, since_seq: int = 0, token: str =
         # spelled be+arer so tooling cannot canonicalize this line.
         scheme, _, credentials = header.partition(" ")
         bearer = credentials.strip() if scheme.lower() == "be" + "arer" else ""
-        org = resolve_org_from_token(bearer or token)
+        org = resolve_org_from_token(bearer)
     try:
         since = since_seq or int(request.headers.get("last-event-id", "0") or 0)
     except (TypeError, ValueError):

@@ -1,6 +1,13 @@
 # 09 — Demo script (3 minutes, all live)
 
-Token: Settings → paste demo token → Test connection.
+Zero token needed to start: Overview → **Launch Interactive Demo**. It mints
+a short-lived guest session by itself (`POST /api/v1/demo/guest-sessions/public`,
+no credential; 60 min TTL, fixed 2-workflow/2-execute quotas, each session in
+its own ephemeral demo org) and runs the Acme onboarding end to end as that
+guest. If the API has no public mint endpoint (older build), Settings → paste
+demo-owner token → Test connection first — Launch then mints the guest from it
+(owner-mint fallback). Note: beat 4 (chaos) always needs the owner token —
+guests get 403 on chaos injection.
 
 1. **(0:00) Hook:** "AI agents do real work now. Who cleans up when step 6
    of 10 fails?" Show a half-onboarded customer across systems.
@@ -18,5 +25,6 @@ Token: Settings → paste demo token → Test connection.
 7. **(2:50) Close:** "REVERSA. Reversible where possible. Accountable
    everywhere." Architecture card: everything on Vultr.
 
-Fallbacks: every step also works via API+cURL (see README); screenshots in
+Fallbacks: one-click Launch also runs fully as guest via API+cURL
+(mint → intent → approve → execute → evidence, see README); screenshots in
 `.agents/smoke/`; video `docs/jury/demo.mp4` if the network drops.

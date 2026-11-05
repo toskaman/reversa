@@ -118,8 +118,9 @@ def _transition_wf(session, wf: Workflow, new: str, actor: str, note: str = "") 
     )
 
 
-def _transition_act(session, wf: Workflow, action: ActionRun, new: str, actor: str,
-                    note: str = "") -> None:
+def transition_action(session, wf: Workflow, action: ActionRun, new: str, actor: str,
+                      note: str = "") -> None:
+    """Allow-listed, journaled action-state transition (raises InvalidTransition)."""
     check_action_transition(action.state, new)
     old = action.state
     action.state = new
@@ -167,7 +168,7 @@ def reclaim_expired_leases(session, wf: Workflow, worker_id: str) -> int:
         )
     ).all()
     for action in rows:
-        _transition_act(session, wf, action, "PENDING", worker_id, "lease expired")
+        transition_action(session, wf, action, "PENDING", worker_id, "lease expired")
         action.lease_owner = ""
         action.lease_expires_at = None
     return len(rows)
@@ -230,9 +231,9 @@ def _fail(session, wf, org, action, worker_id, code, message, retryable) -> None
     action.output_json = json.dumps(
         {"_failure": {"code": code, "retryable": retryable, "error": message}}
     )
-    _transition_act(session, wf, action, "FAILED", worker_id, action.error)
+    transition_action(session, wf, action, "FAILED", worker_id, action.error)
     if retryable and action.attempt < action.max_attempts:
-        _transition_act(session, wf, action, "RETRY_SCHEDULED", worker_id,
+        transition_action(session, wf, action, "RETRY_SCHEDULED", worker_id,
                         f"attempt {action.attempt}/{action.max_attempts}")
         if wf.state == "RUNNING":
             _transition_wf(session, wf, "RETRYING", worker_id, "retry scheduled")
@@ -244,7 +245,7 @@ def _run_claimed(session, wf: Workflow, org: Organization, action: ActionRun,
     """CLAIMED -> EXECUTING -> SUCCEEDED -> VERIFYING -> VERIFIED (or FAILED paths)."""
     action.attempt += 1
     action.lease_expires_at = _lease_until()
-    _transition_act(session, wf, action, "EXECUTING", worker_id,
+    transition_action(session, wf, action, "EXECUTING", worker_id,
                     f"attempt {action.attempt}")
     session.commit()  # persist attempt before any external effect
     inputs = json.loads(action.input_json or "{}")
@@ -257,7 +258,7 @@ def _run_claimed(session, wf: Workflow, org: Organization, action: ActionRun,
     except ChaosTriggered as exc:
         action.error = f"{exc.code}: {exc}"
         if exc.uncertain:
-            _transition_act(session, wf, action, "UNKNOWN_OUTCOME", worker_id, action.error)
+            transition_action(session, wf, action, "UNKNOWN_OUTCOME", worker_id, action.error)
         else:
             _fail(session, wf, org, action, worker_id, exc.code, str(exc), exc.retryable)
             return
@@ -271,9 +272,9 @@ def _run_claimed(session, wf: Workflow, org: Organization, action: ActionRun,
         return
     action.output_json = json.dumps(output)
     action.error = ""
-    _transition_act(session, wf, action, "SUCCEEDED", worker_id, "effect applied")
+    transition_action(session, wf, action, "SUCCEEDED", worker_id, "effect applied")
     session.commit()  # persist result before verification
-    _transition_act(session, wf, action, "VERIFYING", worker_id, "checking effect")
+    transition_action(session, wf, action, "VERIFYING", worker_id, "checking effect")
     session.commit()
     try:
         ok = connector.verify(ctx, contract, inputs, output)
@@ -282,7 +283,7 @@ def _run_claimed(session, wf: Workflow, org: Organization, action: ActionRun,
         ok, verify_note = False, f"verify error {exc.code}: {exc}"
     if ok:
         action.error = ""
-        _transition_act(session, wf, action, "VERIFIED", worker_id, verify_note)
+        transition_action(session, wf, action, "VERIFIED", worker_id, verify_note)
         session.commit()
     else:
         action.error = verify_note
@@ -290,9 +291,9 @@ def _run_claimed(session, wf: Workflow, org: Organization, action: ActionRun,
             {"_failure": {"code": "VERIFY_FAILED", "retryable": True,
                           "error": verify_note, "output": output}}
         )
-        _transition_act(session, wf, action, "FAILED", worker_id, verify_note)
+        transition_action(session, wf, action, "FAILED", worker_id, verify_note)
         if action.attempt < action.max_attempts:
-            _transition_act(session, wf, action, "RETRY_SCHEDULED", worker_id,
+            transition_action(session, wf, action, "RETRY_SCHEDULED", worker_id,
                             f"attempt {action.attempt}/{action.max_attempts}")
             if wf.state == "RUNNING":
                 _transition_wf(session, wf, "RETRYING", worker_id, "retry scheduled")
@@ -311,14 +312,14 @@ def _reconcile_unknown(session, wf: Workflow, org: Organization, action: ActionR
     outcome, detail = _verify_effect(org, wf, action)
     if outcome is VerificationOutcome.PRESENT:
         action.error = ""
-        _transition_act(session, wf, action, "VERIFYING", worker_id, "reconciling outcome")
-        _transition_act(session, wf, action, "VERIFIED", worker_id,
+        transition_action(session, wf, action, "VERIFYING", worker_id, "reconciling outcome")
+        transition_action(session, wf, action, "VERIFIED", worker_id,
                         "effect confirmed; no re-execution")
     elif outcome is VerificationOutcome.ABSENT_CONFIRMED:
         action.error = "effect absent; idempotent re-execution allowed"
-        _transition_act(session, wf, action, "FAILED", worker_id, action.error)
+        transition_action(session, wf, action, "FAILED", worker_id, action.error)
         if action.attempt < action.max_attempts:
-            _transition_act(session, wf, action, "RETRY_SCHEDULED", worker_id,
+            transition_action(session, wf, action, "RETRY_SCHEDULED", worker_id,
                             "reconciled absent; safe idempotent retry")
             if wf.state == "RUNNING":
                 _transition_wf(session, wf, "RETRYING", worker_id, "retry scheduled")
@@ -343,18 +344,18 @@ def _resume_interrupted_verification(session, wf: Workflow, org: Organization,
     INDETERMINATE -> stays VERIFYING (deferred until the verifier answers).
     """
     if action.state == "SUCCEEDED":
-        _transition_act(session, wf, action, "VERIFYING", worker_id,
+        transition_action(session, wf, action, "VERIFYING", worker_id,
                         "resume: success was durable, confirmation was not")
     outcome, detail = _verify_effect(org, wf, action)
     if outcome is VerificationOutcome.PRESENT:
         action.error = ""
-        _transition_act(session, wf, action, "VERIFIED", worker_id,
+        transition_action(session, wf, action, "VERIFIED", worker_id,
                         f"resume: {detail}; no re-execution")
     elif outcome is VerificationOutcome.ABSENT_CONFIRMED:
         action.error = f"resume: {detail}; idempotent re-execution allowed"
-        _transition_act(session, wf, action, "FAILED", worker_id, action.error)
+        transition_action(session, wf, action, "FAILED", worker_id, action.error)
         if action.attempt < action.max_attempts:
-            _transition_act(session, wf, action, "RETRY_SCHEDULED", worker_id,
+            transition_action(session, wf, action, "RETRY_SCHEDULED", worker_id,
                             f"attempt {action.attempt}/{action.max_attempts}")
             if wf.state == "RUNNING":
                 _transition_wf(session, wf, "RETRYING", worker_id, "retry scheduled")
@@ -389,12 +390,12 @@ def _resume_interrupted_compensation(session, wf: Workflow, org: Organization,
             output["_comp_proof"] = {"resumed_after_crash": True, "verify_detail": detail}
             action.output_json = json.dumps(output)
         action.error = ""
-        _transition_act(session, wf, action, "COMPENSATED", worker_id,
+        transition_action(session, wf, action, "COMPENSATED", worker_id,
                         f"resume: {detail}; undo took effect before the crash")
     elif outcome is VerificationOutcome.PRESENT:
         action.error = (f"resume: {detail}; effect still present,"
                         " re-compensation required")
-        _transition_act(session, wf, action, "COMPENSATION_FAILED", worker_id, action.error)
+        transition_action(session, wf, action, "COMPENSATION_FAILED", worker_id, action.error)
     else:
         action.error = f"resume deferred: {detail}"
         append_event(
@@ -453,11 +454,11 @@ def _start_compensation(session, wf: Workflow, org: Organization,
     queued, manual = 0, 0
     for action in actions:
         if action.state in ("PENDING", "RETRY_SCHEDULED"):
-            _transition_act(session, wf, action, "SKIPPED", worker_id,
+            transition_action(session, wf, action, "SKIPPED", worker_id,
                             "dependent blocked by failure")
         elif action.state == "VERIFIED":
             if action.compensation_capability in COMPENSATABLE_CAPS:
-                _transition_act(session, wf, action, "COMPENSATION_PENDING", worker_id,
+                transition_action(session, wf, action, "COMPENSATION_PENDING", worker_id,
                                 "queued for compensation")
                 queued += 1
             else:
@@ -476,7 +477,7 @@ def _start_compensation(session, wf: Workflow, org: Organization,
             # either compensated or escalated to a human, never dropped.
             outcome, detail = _verify_effect(org, wf, action)
             if action.state == "SUCCEEDED":
-                _transition_act(session, wf, action, "VERIFYING", worker_id,
+                transition_action(session, wf, action, "VERIFYING", worker_id,
                                 "late verification before compensation")
             assume_present = outcome is not VerificationOutcome.ABSENT_CONFIRMED
             if assume_present and action.compensation_capability in COMPENSATABLE_CAPS:
@@ -484,13 +485,13 @@ def _start_compensation(session, wf: Workflow, org: Organization,
                     note = "late verification before compensation"
                 else:
                     note = f"effect unprovable ({detail}); assuming present for safety"
-                _transition_act(session, wf, action, "VERIFIED", worker_id, note)
-                _transition_act(session, wf, action, "COMPENSATION_PENDING", worker_id,
+                transition_action(session, wf, action, "VERIFIED", worker_id, note)
+                transition_action(session, wf, action, "COMPENSATION_PENDING", worker_id,
                                 "queued for compensation")
                 queued += 1
             elif assume_present:
                 manual += 1
-                _transition_act(session, wf, action, "VERIFIED", worker_id,
+                transition_action(session, wf, action, "VERIFIED", worker_id,
                                 f"effect may exist ({detail}); needs a human")
                 append_event(
                     session, wf.id, wf.org_id, "compensation.manual_required",
@@ -500,9 +501,9 @@ def _start_compensation(session, wf: Workflow, org: Organization,
                     actor=worker_id,
                 )
             else:
-                _transition_act(session, wf, action, "FAILED", worker_id,
+                transition_action(session, wf, action, "FAILED", worker_id,
                                 f"effect confirmed absent ({detail}); nothing to undo")
-                _transition_act(session, wf, action, "SKIPPED", worker_id,
+                transition_action(session, wf, action, "SKIPPED", worker_id,
                                 "no confirmed effect to undo")
     append_event(
         session, wf.id, wf.org_id, "compensation.started",
@@ -514,7 +515,7 @@ def _start_compensation(session, wf: Workflow, org: Organization,
 def _compensate_one(session, wf: Workflow, org: Organization, action: ActionRun,
                     worker_id: str) -> None:
     """COMPENSATION_PENDING -> COMPENSATING -> COMPENSATED (verified) or FAILED."""
-    _transition_act(session, wf, action, "COMPENSATING", worker_id, "compensating")
+    transition_action(session, wf, action, "COMPENSATING", worker_id, "compensating")
     session.commit()
     inputs = json.loads(action.input_json or "{}")
     original_output = json.loads(action.output_json or "{}")
@@ -531,7 +532,7 @@ def _compensate_one(session, wf: Workflow, org: Organization, action: ActionRun,
                      f"{exc} (retryable={exc.retryable})", exc.retryable)
         return
     if isinstance(proof, dict) and proof.get("noop"):
-        _transition_act(session, wf, action, "COMPENSATED", worker_id, "noop (read-only)")
+        transition_action(session, wf, action, "COMPENSATED", worker_id, "noop (read-only)")
         session.commit()
         return
     # Verify the compensation: the forward effect must now be gone.
@@ -545,7 +546,7 @@ def _compensate_one(session, wf: Workflow, org: Organization, action: ActionRun,
                      "effect still present after compensation", True)
         return
     action.output_json = json.dumps({**original_output, "_comp_proof": redact(proof)})
-    _transition_act(session, wf, action, "COMPENSATED", worker_id, "effect undone+verified")
+    transition_action(session, wf, action, "COMPENSATED", worker_id, "effect undone+verified")
     session.commit()
 
 
@@ -558,7 +559,7 @@ def _comp_failed(session, wf, action, worker_id, code, message, retryable=True) 
     output["_comp_attempts"] = attempts
     action.output_json = json.dumps(output)
     action.error = f"{code}: {message}"
-    _transition_act(session, wf, action, "COMPENSATION_FAILED", worker_id,
+    transition_action(session, wf, action, "COMPENSATION_FAILED", worker_id,
                     f"{action.error} (comp attempt {attempts}/3)")
     session.commit()
 
@@ -575,7 +576,7 @@ def _pump_forward(session, wf: Workflow, org: Organization, worker_id: str,
             ActionRun.lease_expires_at < now,
         )
     ).all():
-        _transition_act(session, wf, action, "UNKNOWN_OUTCOME", worker_id,
+        transition_action(session, wf, action, "UNKNOWN_OUTCOME", worker_id,
                         "owner gone; outcome uncertain")
     session.commit()
     # Crash leftovers: SUCCEEDED/VERIFYING with a stale lease never confirmed
@@ -623,7 +624,7 @@ def _pump_forward(session, wf: Workflow, org: Organization, worker_id: str,
             continue
         status = _deps_status(session, wf, action, dep_states)
         if status == "blocked":
-            _transition_act(session, wf, action, "SKIPPED", worker_id,
+            transition_action(session, wf, action, "SKIPPED", worker_id,
                             "dependency failed or skipped")
             session.commit()
             return True
@@ -646,7 +647,7 @@ def _pump_forward(session, wf: Workflow, org: Organization, worker_id: str,
             time.sleep(delay)
             fresh = session.get(ActionRun, action.id)
             if fresh is not None and fresh.state == "RETRY_SCHEDULED":
-                _transition_act(session, wf, fresh, "PENDING", worker_id, "retry due")
+                transition_action(session, wf, fresh, "PENDING", worker_id, "retry due")
                 session.commit()
             return True
     # 5. All done -> final verification + complete.
@@ -686,7 +687,7 @@ def _pump_compensation(session, wf: Workflow, org: Organization, worker_id: str)
             return True
     for action in actions:
         if action.state == "COMPENSATION_FAILED" and _comp_attempts(action) < 3:
-            _transition_act(session, wf, action, "COMPENSATION_PENDING", worker_id,
+            transition_action(session, wf, action, "COMPENSATION_PENDING", worker_id,
                             "compensation retry")
             session.commit()
             return True
@@ -776,7 +777,7 @@ def reconcile_on_startup(session_factory, worker_id: str) -> dict:
                                     ActionRun.lease_expires_at < now)
         ).all():
             wf = session.get(Workflow, action.workflow_id)
-            _transition_act(session, wf, action, "PENDING", worker_id,
+            transition_action(session, wf, action, "PENDING", worker_id,
                             "startup: lease expired")
             action.lease_owner = ""
             stats["requeued"] += 1
@@ -785,7 +786,7 @@ def reconcile_on_startup(session_factory, worker_id: str) -> dict:
                                     ActionRun.lease_expires_at < now)
         ).all():
             wf = session.get(Workflow, action.workflow_id)
-            _transition_act(session, wf, action, "UNKNOWN_OUTCOME", worker_id,
+            transition_action(session, wf, action, "UNKNOWN_OUTCOME", worker_id,
                             "startup: owner crashed mid-effect")
             stats["unknown"] += 1
         session.commit()
@@ -873,7 +874,7 @@ def resume_workflow_sync(session_factory, workflow_id: int,
                 ActionRun.workflow_id == wf.id, ActionRun.state == "CLAIMED",
                 ActionRun.lease_expires_at < now)
         ).all():
-            _transition_act(session, wf, action, "PENDING", worker_id,
+            transition_action(session, wf, action, "PENDING", worker_id,
                             "resume: lease expired")
             action.lease_owner = ""
             action.lease_expires_at = None
@@ -883,7 +884,7 @@ def resume_workflow_sync(session_factory, workflow_id: int,
                 ActionRun.workflow_id == wf.id, ActionRun.state == "EXECUTING",
                 ActionRun.lease_expires_at < now)
         ).all():
-            _transition_act(session, wf, action, "UNKNOWN_OUTCOME", worker_id,
+            transition_action(session, wf, action, "UNKNOWN_OUTCOME", worker_id,
                             "resume: owner crashed mid-effect")
             stats["unknown"] += 1
         session.commit()

@@ -31,13 +31,19 @@ verified preconditions, and files the incident report. Everything is
 journaled in a hash-chained Evidence Passport you can export and verify
 offline.
 
-On the live demo, onboard Acme Corporation in 10 verified steps, then hit
-INJECT FAILURE: billing goes down, and you watch detection, compensation
-and restoration happen for real — resources before, during and after.
+On the live demo, one click launches Jury Mode — guest session, plan,
+approval, 10 verified steps across 5 systems — then (with the demo token)
+hit INJECT FAILURE: billing goes down, and you watch detection,
+compensation and restoration happen for real — resources before, during
+and after.
 
 Built with FastAPI, Next.js, Postgres and Docker Compose, deployed on one
-Vultr Cloud Compute VM with automatic TLS. AI planning ships with a
-deterministic baseline and an optional Vultr Inference provider.
+Vultr Cloud Compute VM with automatic TLS. AI planning is fenced and
+honest: deterministic baseline by default, optional Vultr Inference with
+explicit fallback, and a 30-case offline eval in-repo (baseline 100%
+schema-valid, 0% refusal — a stated limitation). V2-04 ships a 255-test
+API suite (2 honest skips), 20/20 chaos-matrix scenarios, and per-run
+recovery manifests — every claim re-runnable from the repo.
 
 Reversible where possible. Accountable everywhere.
 
@@ -55,7 +61,7 @@ saga, self-healing, vultr, workflows
 
 - Demo: https://217.69.3.211.nip.io
 - Code: https://github.com/toskaman/reversa
-- Video: (upload docs/jury/demo.mp4)
+- Video: (upload docs/jury/demo-v2.mp4 — 85 s narrated, 6 scenes, SRT included; v1 demo.mp4 kept as fallback)
 - Slides: docs/jury/slides.pdf (source: docs/jury/build_slides.py + slides.md)
 - Cover: docs/jury/cover.png (16:10) or cover-16x9.png (16:9)
 - Gallery: docs/jury/gallery/ (8 authentic captures)

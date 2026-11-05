@@ -12,9 +12,17 @@ export default function Overview() {
   const [error, setError] = useState("");
 
   useEffect(() => {
-    api<{ data: Workflow[] }>("/api/v1/workflows?limit=20")
-      .then((r) => setItems(r.data))
-      .catch((e) => setError(String(e)));
+    // getToken() prefers the owner token, else the JuryLaunch guest token,
+    // so the Overview works after a zero-token demo run. Refresh on
+    // guest-ready so the list populates right after Launch without a reload.
+    function load() {
+      api<{ data: Workflow[] }>("/api/v1/workflows?limit=20")
+        .then((r) => { setItems(r.data); setError(""); })
+        .catch((e) => setError(String(e)));
+    }
+    load();
+    window.addEventListener("reversa:guest-ready", load);
+    return () => window.removeEventListener("reversa:guest-ready", load);
   }, []);
 
   const active = items.filter((w) =>
@@ -26,7 +34,7 @@ export default function Overview() {
     <div>
       <h1>Overview</h1>
       <p className="sub">AI that doesn&apos;t just act. It makes things right.</p>
-      {error && <div className="err">{error} — configure your token in Settings.</div>}
+      {error && <div className="err">{error} — press Launch Interactive Demo below, or configure your token in Settings.</div>}
       <JuryLaunch />
       <div className="row">
         <div className="card"><h2>Active ({active.length})</h2>

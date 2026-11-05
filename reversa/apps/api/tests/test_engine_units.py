@@ -741,3 +741,140 @@ def test_chaos_matching_precedence_is_lowest_id(fresh_db, demo_auth):
         assert second.times_remaining == 1
     finally:
         session.close()
+
+
+def test_raising_verify_defers_indeterminate_end_to_end(
+        fresh_db, demo_auth, monkeypatch):
+    """A raising verifier must defer (INDETERMINATE), never fail or retry.
+
+    Engine-level end-to-end mirror of the route-level verifier-outage
+    test: while verify raises (ConnectorError for seq 1, a raw crash for
+    seq 2), UNKNOWN_OUTCOME and VERIFYING actions stay put through direct
+    reconciliation, startup recovery, and the forward pump (RUNNING,
+    attempts untouched); after the verifier recovers the run completes.
+    """
+    import datetime as dt
+
+    from reversa_api.connectors.sdk import ConnectorError, get_connector
+    from reversa_api.engine import saga as saga_mod
+    from reversa_api.models import Event
+
+    identity = get_connector("demo-identity")
+    real_verify = identity.verify
+
+    def down_verify(ctx, contract, inputs, output):
+        if inputs.get("org_slug") == "ws-r1":
+            raise ConnectorError("VERIFY_TIMEOUT", "simulated verifier outage",
+                                 retryable=True)
+        raise RuntimeError("simulated verifier crash")
+
+    monkeypatch.setattr(identity, "verify", down_verify)
+    stale = utcnow() - dt.timedelta(seconds=60)
+    session = session_for("main")()
+    try:
+        wf = Workflow(org_id=demo_auth["org_id"], name="t", intent="t",
+                      state="RUNNING", plan_json="{}", created_by="test")
+        session.add(wf)
+        session.flush()
+        org = session.get(Organization, demo_auth["org_id"])
+        a1 = _seed_action(session, wf.id, seq=1, state="UNKNOWN_OUTCOME",
+                           key="k-raise-1", inputs={"org_slug": "ws-r1"},
+                           output={}, error="CHAOS_TIMEOUT: simulated",
+                           lease_expires_at=stale)
+        a2 = _seed_action(session, wf.id, seq=2, state="VERIFYING",
+                           key="k-raise-2", inputs={"org_slug": "ws-r2"},
+                           output={}, lease_expires_at=stale)
+        session.commit()
+        # Direct helper calls: must not raise, must stay put.
+        assert saga_mod._reconcile_unknown(
+            session, wf, org, session.get(ActionRun, a1.id), "w"
+        ) is VerificationOutcome.INDETERMINATE
+        assert session.get(ActionRun, a1.id).state == "UNKNOWN_OUTCOME"
+        assert saga_mod._resume_interrupted_verification(
+            session, wf, org, session.get(ActionRun, a2.id), "w"
+        ) is VerificationOutcome.INDETERMINATE
+        assert session.get(ActionRun, a2.id).state == "VERIFYING"
+        attempts_before = {a.seq: a.attempt for a in
+                           session.query(ActionRun).filter_by(
+                               workflow_id=wf.id).all()}
+        wf_id = wf.id
+    finally:
+        session.close()
+    # Startup path: same raising verifier must defer, not crash.
+    stats = reconcile_on_startup(session_for("main"), "worker-2")
+    assert stats["deferred"] >= 1, stats
+    assert stats["failed"] == 0, stats
+    # The pump must not crash, fail, or retry on a raising verifier.
+    assert execute_workflow_sync(session_for("main"), wf_id, worker_id="w") == "RUNNING"
+    session = session_for("main")()
+    try:
+        states = {a.seq: a.state for a in
+                  session.query(ActionRun).filter_by(workflow_id=wf_id).all()}
+        assert states == {1: "UNKNOWN_OUTCOME", 2: "VERIFYING"}, states
+        attempts_after = {a.seq: a.attempt for a in
+                          session.query(ActionRun).filter_by(
+                              workflow_id=wf_id).all()}
+        assert attempts_after == attempts_before, "deferred work never re-runs"
+        types = [e.type for e in session.query(Event).filter_by(
+            workflow_id=wf_id).all()]
+        assert "action.reconcile_indeterminate" in types, types
+        assert "action.verify_indeterminate" in types, types
+    finally:
+        session.close()
+    # Verifier recovers: absent effects retry idempotently to COMPLETED.
+    monkeypatch.setattr(identity, "verify", real_verify)
+    assert execute_workflow_sync(session_for("main"), wf_id, worker_id="w") == "COMPLETED"
+
+
+def test_chaos_disabled_exhausted_and_foreign_rules_do_not_shadow(
+        fresh_db, demo_auth):
+    """F3: only live rules for this connector+action compete.
+
+    Older decoys — disabled, budget-exhausted, and other-connector —
+    must all be skipped; the live match fires, pays the only budget,
+    and journals exactly one chaos.injected event.
+    """
+    from reversa_api.connectors.sdk import ChaosTriggered
+    from reversa_api.engine import saga as saga_mod
+    from reversa_api.models import Event
+    session = session_for("main")()
+    try:
+        wf = Workflow(org_id=demo_auth["org_id"], name="t", intent="t",
+                      state="RUNNING", plan_json="{}", created_by="test")
+        session.add(wf)
+        session.flush()
+        org = session.get(Organization, demo_auth["org_id"])
+        action = _seed_action(
+            session, wf.id, seq=1, state="PENDING", key="k-f3-live",
+            action_type="crm.validate_customer", connector_id="demo-crm",
+            inputs={"customer_name": "x"})
+        disabled = _seed_chaos_rule(session, demo_auth["org_id"], "demo-crm",
+                                    "http500",
+                                    target_action="crm.validate_customer")
+        disabled.enabled = 0
+        exhausted = _seed_chaos_rule(session, demo_auth["org_id"], "demo-crm",
+                                     "http429",
+                                     target_action="crm.validate_customer",
+                                     times=0)
+        foreign = _seed_chaos_rule(session, demo_auth["org_id"], "demo-identity",
+                                   "crash",
+                                   target_action="crm.validate_customer")
+        match = _seed_chaos_rule(session, demo_auth["org_id"], "demo-crm",
+                                 "malformed",
+                                 target_action="crm.validate_customer")
+        session.commit()
+        assert disabled.id < exhausted.id < foreign.id < match.id
+        with pytest.raises(ChaosTriggered) as exc_info:
+            saga_mod._consume_chaos(
+                session, wf, org, session.get(ActionRun, action.id), "w")
+        assert exc_info.value.code == "CHAOS_MALFORMED", exc_info.value.code
+        assert (disabled.times_remaining, disabled.enabled) == (1, 0)
+        assert exhausted.times_remaining == 0, "spent rule stays spent"
+        assert foreign.times_remaining == 1, "other connector untouched"
+        assert match.times_remaining == 0
+        injected = session.query(Event).filter_by(
+            workflow_id=wf.id, type="chaos.injected").all()
+        assert len(injected) == 1
+        assert json.loads(injected[0].payload_json)["fault"] == "malformed"
+    finally:
+        session.close()

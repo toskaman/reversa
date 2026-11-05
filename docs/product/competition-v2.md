@@ -123,8 +123,9 @@ grounded in repo (`README.md`, `docs/product/recovery-proof-engine.md`).
 3. **Containment gap is real.** Every inspected rival sandboxes *code*;
    REVERSA isolates *tenants/demo systems*. Do not claim code sandboxing.
    Frame honestly: "they contain code, we contain business blast radius" —
-   and the refused-by-design list (real payments code-enforced; mass sends
-   refused by missing capability, no dedicated bulk guard yet) is the
+   and the refused-by-design list (real payments + mid-flight cancel
+   code-enforced; mass sends / third-party-account effects refused by
+   missing capability, no dedicated bulk guard yet) is the
    business equivalent of their seccomp/no-network flags.
 4. **Deployment honesty wins points.** Tripwire self-declares mock mode;
    two rivals show Vercel badges. REVERSA's 100%-on-Vultr live demo with

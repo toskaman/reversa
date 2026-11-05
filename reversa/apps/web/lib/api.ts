@@ -9,8 +9,13 @@ export function apiBase(): string {
 }
 
 export function getToken(): string {
+  // V4-5: the owner token wins when configured; otherwise fall back to the
+  // guest session token so a zero-token JuryLaunch can open detail views
+  // (workflows, evidence, recovery, SSE tickets). Server-side 403s still
+  // guard every privileged action for guests.
   if (typeof window === "undefined") return "";
-  return window.localStorage.getItem("reversa_token") || "";
+  return window.localStorage.getItem("reversa_token")
+      || window.localStorage.getItem("reversa_guest_token") || "";
 }
 
 export class ApiError extends Error {
