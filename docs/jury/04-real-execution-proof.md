@@ -25,3 +25,10 @@ test suite (`pytest reversa/apps/api/tests`, `smoke_browser.py`).
    (`verify --strict` with `--expect-count N` and/or `--expect-head <hash>`)
    fails closed without caller-supplied anchors (either anchor alone
    suffices) and checks them when given.
+8. **Real AI planning, end to end (live, 2026-11-05):** guest session `mint →
+   POST /api/v1/intents → approve → execute` on production produced workflow
+   #45 ("Onboard Globex Inc … 6 user accounts"): provider `vultr-inference`,
+   model `deepseek-v4.1-flash-1017` (requested == served, no substitution),
+   plan latency 4171 ms, state COMPLETED, 9/9 actions VERIFIED across 6
+   connectors, 54-event hash chain verified VALID by the export endpoint.
+   Full redacted bundle kept out-of-repo; reproduce via Jury Mode.
