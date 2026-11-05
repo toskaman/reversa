@@ -1,6 +1,6 @@
 [project]
 name = "reversa-api"
-version = "0.2.0rc.4"
+version = "0.2.0rc.5"
 description = "REVERSA — Self-Healing AI Operations Platform API"
 requires-python = ">=3.12"
 dependencies = [
