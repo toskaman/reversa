@@ -8,7 +8,7 @@ Légende: ✅ vérifié (commande + preuve), ⬜ non fait.
 | Saga multi-étapes | Succès ou compensation selon états vérifiés | ✅ | pytest 19/19 + chaos distant COMPENSATED (7 inversées) |
 | Compensations réelles | Ressources créées puis supprimées/rétablies | ✅ | workspace supprimé, users archivés (test + API démo) |
 | Plan IA exécutable | Intention -> plan valide exécuté | ✅ | POST /intents E2E local + prod (déterministe; Vultr prêt) |
-| 20 tests moteur §5.5 | Tous passent, états vérifiés | ✅ | 19 pytest couvrant transitions, races, idempotence, UNKNOWN, crash, cancel, tenant, approvals |
+| 20 tests moteur §5.5 | Tous passent, états vérifiés | ✅ | 20 pytest + 1 skip honnête (transitions, races, idempotence, UNKNOWN, crash, cancel, tenant, approvals, eval IA 10 cas) |
 | Chaos démo | INJECT FAILURE -> détection + compensation + rapport | ✅ | Demo Lab 1-clic + 5/5 bench chaos COMPENSATED |
 | Concurrence | Doublons/versions gérés, pas d'écrasement | ✅ | claim 5 threads → 1 gagnant; PreconditionFailed testé |
 | Crash & recovery | Redémarrage worker sans double effet | ✅ | reconcile_on_startup + UNKNOWN→vérif→retry idempotent |
