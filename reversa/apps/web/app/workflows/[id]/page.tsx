@@ -3,8 +3,9 @@
 import Link from "next/link";
 import { use, useEffect, useState } from "react";
 import { api, ApiError } from "../../../lib/api";
-import type { Action, Preview, Workflow } from "../../../lib/types";
+import type { Action, Evt, Preview, Workflow } from "../../../lib/types";
 import StatusBadge from "../../../components/StatusBadge";
+import WorkflowHeader from "../../../components/WorkflowHeader";
 import WorkflowGraph from "../../../components/WorkflowGraph";
 import EventTimeline from "../../../components/EventTimeline";
 import DecisionInspector from "../../../components/Recovery/DecisionInspector";
@@ -14,6 +15,7 @@ export default function WorkflowDetail({ params }: { params: Promise<{ id: strin
   const [wf, setWf] = useState<Workflow | null>(null);
   const [actions, setActions] = useState<Action[]>([]);
   const [preview, setPreview] = useState<Preview | null>(null);
+  const [createdPayload, setCreatedPayload] = useState<unknown>(undefined);
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
   const [loading, setLoading] = useState(true);
@@ -27,6 +29,10 @@ export default function WorkflowDetail({ params }: { params: Promise<{ id: strin
       .finally(() => setLoading(false));
     api<Preview>(`/api/v1/workflows/${id}/preview`)
       .then(setPreview)
+      .catch(() => {});
+    api<{ data: Evt[] }>(`/api/v1/workflows/${id}/events?limit=500`)
+      .then((r) => setCreatedPayload(
+        r.data.find((e) => e.type === "workflow.created")?.payload))
       .catch(() => {});
   }
 
@@ -88,9 +94,7 @@ export default function WorkflowDetail({ params }: { params: Promise<{ id: strin
 
   return (
     <div>
-      <h1>{wf.name}</h1>
-      <p className="sub">#{wf.id} · <StatusBadge state={wf.state} /> ·
-        plan <code>{(wf.plan_hash || "").slice(0, 12)}…</code></p>
+      <WorkflowHeader workflow={wf} createdPayload={createdPayload} />
       {error && <div className="err">{error}</div>}
       <div>
         {wf.state === "AWAITING_APPROVAL" && (
