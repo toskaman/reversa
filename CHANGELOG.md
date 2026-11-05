@@ -10,6 +10,50 @@ Skips in all releases are the same two honest conditional skips
 (Vultr live-provider eval, GitHub live cycle); no Vultr/GitHub secrets
 were present in the environment when the counts were observed.
 
+## RC6 — Guest chaos for the jury Recovery Moment (0.2.0-rc.6)
+
+- Commit: `db99170`, tag `v0.2.0-rc.6`, 2026-11-05.
+- API suite: **689 passed, 2 skipped, 0 failed** — observed locally on
+  the merged tree (Python 3.14.4, pytest 9.2.0, 103s).
+- CI: success on the RC commit (run 42115552403, 1m43s).
+- Prod (217.69.7.155): healthz `0.2.0-rc.6`, readyz ready; guest chaos
+  inject observed **201** live; browser smoke **10/10 ALL PASS,
+  0 console errors** (settings, agentic clarify, plan, execute wf83,
+  workflow graph, chaos scenario wf84, recovery list, evidence VALID,
+  connectors).
+- Change: the guest-actor middleware no longer denies chaos. Rules are
+  org-scoped (saga matches `ChaosRule.org_id`), `times <= 10`, capped
+  at 50 active rules per org (429 beyond), and swept at guest-session
+  expiry — a guest can only fault its own ephemeral demo tenant.
+  Tests: 3 rewritten to the allow-contract, 1 CORS test retargeted to
+  the quota-410 path, 1 new cap test, plus A/B cross-guest isolation.
+- Smoke script `reversa/tests/e2e/smoke_browser.py` is now agentic:
+  asserts NEEDS CLARIFICATION on the vague default intent, then runs
+  the deterministic plan/approve/execute path; env-independent
+  settings check; no crash when the workflow link is absent.
+
+## RC5 — Agentic Cycle 2 live (0.2.0-rc.5)
+
+- Commit: `0cecb98` (version bump; feature merge `ab0e66b`),
+  tag `v0.2.0-rc.5`, 2026-11-05.
+- API suite: **688 passed, 2 skipped, 0 failed** on the merged tree;
+  node 27/27, `tsc --noEmit` clean, `next build` green.
+- CI: success on the RC commit (run 42111933000, 1m30s).
+- Content: intent gate (clarify max 3 / refuse REFUSAL_CODES),
+  offboarding (3 steps) + escalation (7 steps) templates, eval matrix
+  30 → 100 cases, cost-guarded live runner, provenance UI
+  (contracts + header), bench + live-eval docs, CORSMiddleware
+  outermost (middleware 403/429 carry ACAO).
+- Live campaign (2026-11-05, `deepseek-v4.1-flash-1017`, key from local
+  DPAPI store): 2 runs × 10 adversarial-heavy cases, 15387 + 16588 =
+  **31975 tokens**, JSON 100%, DAG 100%, schema-valid 20% / 10%
+  (raw model output; every invalid row rejected by the deterministic
+  validator, never executed). Aggregates in
+  `docs/benchmarks/ai-eval-live-RESULTS.md`; per-row JSON local only.
+- Prod proofs on RC5: E2E IA wf80 + wf81 (mint 201 → intent 201
+  `vultr-inference` → approve → execute COMPLETED 9/9 VERIFIED,
+  evidence chain VALID, 54 events). Bundles local + mirrored.
+
 ## RC4 — Cycle 1 merge + P0 hardening (0.2.0-rc.4)
 
 - Commit: `3680cca` ("V3 Cycle 1 merge + P0 fixes (0.2.0-rc.4)"),
