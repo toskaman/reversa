@@ -66,7 +66,7 @@ then run the 30-second demo above.
 ## Tests & benchmarks
 
 ```bash
-python -m pytest reversa/apps/api/tests/ -q        # 258 passed, 2 honest skips (V2)
+python -m pytest reversa/apps/api/tests/ -q        # 363 passed, 2 honest skips (RC4 v0.2.0-rc.4)
 python reversa/tests/e2e/smoke_browser.py --token <tok>   # 9/9 in real Chromium
 python reversa/tests/performance/bench.py --base <url> --token <tok>
 ```
@@ -79,8 +79,9 @@ Details: [docs/benchmarks/results.md](docs/benchmarks/results.md).
 
 - **Cloud Compute** — the entire product (API, worker, web, Postgres, Caddy)
   runs on one VM; nothing executes elsewhere. ~$2 for the whole event.
-- **Serverless Inference** — optional provider (OpenAI-compatible, JSON mode,
-  validated plans, honest fallback). Model list verified live.
+- **Serverless Inference** — live in prod (`deepseek-v4.1-flash-1017`,
+  OpenAI-compatible, JSON mode, validated plans, honest deterministic
+  fallback). Real AI plans served via guest intents (see 05).
 
 ## Security & honest limits
 

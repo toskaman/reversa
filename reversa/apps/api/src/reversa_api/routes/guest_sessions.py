@@ -13,6 +13,7 @@ Guests can never call the owner endpoints; neither can non-demo orgs.
 
 from __future__ import annotations
 
+import ipaddress
 import threading
 import time
 
@@ -35,6 +36,7 @@ from ..auth import (
     require_demo_owner,
     revoke_owner_token,
 )
+from ..config import settings
 from ..schemas import Strict
 
 router = APIRouter(prefix="/api/v1/demo", tags=["guest-sessions"])
@@ -74,6 +76,51 @@ def reset_public_mint_state() -> None:
     """Tests only: drop all public-mint window counters."""
     with _PUBLIC_LOCK:
         _PUBLIC_WINDOWS.clear()
+
+
+def _trusted_proxy_nets():
+    """Parse settings.trusted_proxies; unparseable entries are skipped."""
+    nets = []
+    for entry in settings.trusted_proxies.split(","):
+        entry = entry.strip()
+        if not entry:
+            continue
+        try:
+            nets.append(ipaddress.ip_network(entry, strict=False))
+        except ValueError:
+            continue
+    return nets
+
+
+def public_mint_ip(request: Request) -> str:
+    """Best-effort visitor IP for the public-mint bucket (P0-2).
+
+    Behind Caddy every request arrives from the proxy's own (container)
+    IP, so keying on request.client.host collapsed all visitors into one
+    global bucket. When the direct peer belongs to a trusted proxy
+    network, use the LAST X-Forwarded-For entry — the address our proxy
+    appended for its own peer (earlier entries are client-controlled).
+    Untrusted peer, missing or malformed header: fall back to the peer,
+    so a forged header can neither poison another bucket nor rotate
+    buckets to dodge the limit.
+    """
+    peer = request.client.host if request.client else "unknown"
+    xff = request.headers.get("x-forwarded-for", "")
+    if not xff:
+        return peer
+    try:
+        peer_ip = ipaddress.ip_address(peer)
+    except ValueError:
+        return peer
+    if not any(peer_ip in net for net in _trusted_proxy_nets()):
+        return peer
+    hops = [h.strip() for h in xff.split(",") if h.strip()]
+    if not hops:
+        return peer
+    try:
+        return str(ipaddress.ip_address(hops[-1]))
+    except ValueError:
+        return peer
 
 
 def _check_public_mint(ip: str, now: float) -> tuple[bool, float]:
@@ -134,7 +181,7 @@ def create_public_guest_session(request: Request,
     ephemeral demo org, swept on expiry.
     """
     del body  # empty schema: presence only enforces the 422-on-fields rule
-    ip = request.client.host if request.client else "unknown"
+    ip = public_mint_ip(request)
     ok, retry_after = _check_public_mint(ip, time.time())
     if not ok:
         return JSONResponse(

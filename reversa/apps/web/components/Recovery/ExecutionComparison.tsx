@@ -5,7 +5,8 @@ import { api } from "../../lib/api";
 import type { Action, Evt, Workflow } from "../../lib/types";
 import StatusBadge from "../StatusBadge";
 import {
-  eventSpanMs, firstFailedSeq, formatMs, summarizeActions,
+  eventSpanMs, eventsTruncationNotice, firstFailedSeq, formatMs,
+  summarizeActions,
 } from "./recovery-utils";
 
 interface Loaded {
@@ -53,6 +54,9 @@ function Lane({ label, loaded, error }: {
       <p><StatusBadge state={loaded.wf.state} />{" "}
         <span className="muted">{loaded.events.length} events ·{" "}
           span {formatMs(eventSpanMs(loaded.events))}</span></p>
+      {eventsTruncationNotice(loaded.events) && (
+        <p className="muted">⚠ {eventsTruncationNotice(loaded.events)}</p>
+      )}
       <table><tbody>
         <tr><td>Steps</td><td>{stats.total}</td></tr>
         <tr><td>Verified</td><td>{stats.verified}</td></tr>

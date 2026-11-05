@@ -81,7 +81,10 @@ ACT_TRANSITIONS: dict[str, frozenset[str]] = {
     "VERIFYING": frozenset({"VERIFIED", "FAILED", "UNKNOWN_OUTCOME"}),
     "VERIFIED": frozenset({"COMPENSATION_PENDING"}),
     "FAILED": frozenset({"RETRY_SCHEDULED", "COMPENSATION_PENDING", "SKIPPED"}),
-    "RETRY_SCHEDULED": frozenset({"PENDING"}),
+    # SKIPPED: _start_compensation drops a scheduled retry that never ran
+    # (P1-1: a retry may still be pending when another action's failure
+    # starts compensation; the retry is cancelled, not executed).
+    "RETRY_SCHEDULED": frozenset({"PENDING", "SKIPPED"}),
     "UNKNOWN_OUTCOME": frozenset({"VERIFYING", "PENDING", "FAILED"}),
     "COMPENSATION_PENDING": frozenset({"COMPENSATING", "SKIPPED"}),
     "COMPENSATING": frozenset({"COMPENSATED", "COMPENSATION_FAILED"}),

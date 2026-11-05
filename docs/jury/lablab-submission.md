@@ -31,19 +31,22 @@ verified preconditions, and files the incident report. Everything is
 journaled in a hash-chained Evidence Passport you can export and verify
 offline.
 
-On the live demo, one click launches Jury Mode — guest session, plan,
-approval, 10 verified steps across 5 systems — then (with the demo token)
-hit INJECT FAILURE: billing goes down, and you watch detection,
-compensation and restoration happen for real — resources before, during
-and after.
+On the live demo, one click launches Jury Mode with zero token —
+it mints its own guest session, then runs plan, approval and 10 verified
+steps across 5 systems. Then (with the demo-owner token) hit INJECT
+FAILURE: billing goes down, and you watch detection, compensation and
+restoration happen for real — resources before, during and after.
 
 Built with FastAPI, Next.js, Postgres and Docker Compose, deployed on one
 Vultr Cloud Compute VM with automatic TLS. AI planning is fenced and
-honest: deterministic baseline by default, optional Vultr Inference with
-explicit fallback, and a 30-case offline eval in-repo (baseline 100%
-schema-valid, 0% refusal — a stated limitation). V2-04 ships a 255-test
-API suite (2 honest skips), 20/20 chaos-matrix scenarios, and per-run
-recovery manifests — every claim re-runnable from the repo.
+honest: Vultr Inference is live in prod (deepseek-v4.1-flash-1017) — real
+AI plans are accepted only after strict validation, malformed drafts are
+rejected (422) and never executed, and the deterministic baseline remains
+the default with explicit fallback. A 100-case offline eval ships in-repo
+(baseline 100% schema-valid, 0% refusal — a stated limitation). Release
+0.2.0-rc.4 ships a 363-test API suite (2 honest skips), 20/20 chaos-matrix
+scenarios, and per-run recovery manifests — every claim re-runnable from
+the repo.
 
 Reversible where possible. Accountable everywhere.
 

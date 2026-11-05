@@ -5,6 +5,12 @@ Genesis prev_hash is "GENESIS". Canonical bytes (conflict C9 resolution):
 json.dumps(sort_keys=True, separators=(",", ":"), ensure_ascii=True), UTF-8.
 The chain makes tampering detectable, not impossible without an external
 anchor (stated honestly in docs).
+
+VALID means prefix-consistent only: events 1..N link back to GENESIS with
+no sequence gaps, prev_hash breaks, or hash mismatches. Trailing
+truncation (tail rows deleted) still verifies VALID; ruling it out needs
+caller-supplied anchors (see cli.verify --strict) or a terminal-marker
+check (see routes.recovery.get_recovery_manifest).
 """
 
 from __future__ import annotations

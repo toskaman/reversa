@@ -248,7 +248,16 @@ def _run_claimed(session, wf: Workflow, org: Organization, action: ActionRun,
     transition_action(session, wf, action, "EXECUTING", worker_id,
                     f"attempt {action.attempt}")
     session.commit()  # persist attempt before any external effect
-    inputs = json.loads(action.input_json or "{}")
+    try:
+        inputs = json.loads(action.input_json or "{}")
+    except (ValueError, TypeError):
+        _fail(session, wf, org, action, worker_id, "INVALID_INPUTS",
+              "stored inputs are not readable JSON", False)
+        return
+    if not isinstance(inputs, dict):
+        _fail(session, wf, org, action, worker_id, "INVALID_INPUTS",
+              "stored inputs have no usable shape", False)
+        return
     ctx = _ctx(org, wf, action)
     try:
         connector = get_connector(action.connector_id)
@@ -270,7 +279,12 @@ def _run_claimed(session, wf: Workflow, org: Organization, action: ActionRun,
     except ConnectorError as exc:
         _fail(session, wf, org, action, worker_id, exc.code, str(exc), exc.retryable)
         return
-    action.output_json = json.dumps(output)
+    try:
+        action.output_json = json.dumps(output)
+    except (TypeError, ValueError):
+        _fail(session, wf, org, action, worker_id, "INVALID_OUTPUT",
+              "connector returned a non-serializable output", False)
+        return
     action.error = ""
     transition_action(session, wf, action, "SUCCEEDED", worker_id, "effect applied")
     session.commit()  # persist result before verification
@@ -281,6 +295,8 @@ def _run_claimed(session, wf: Workflow, org: Organization, action: ActionRun,
         verify_note = "effect confirmed" if ok else "effect NOT confirmed"
     except ConnectorError as exc:
         ok, verify_note = False, f"verify error {exc.code}: {exc}"
+    except Exception as exc:  # noqa: BLE001 - a verifier crash is never a 500
+        ok, verify_note = False, f"verifier crashed ({type(exc).__name__}): {exc}"
     if ok:
         action.error = ""
         transition_action(session, wf, action, "VERIFIED", worker_id, verify_note)
@@ -409,7 +425,12 @@ def _resume_interrupted_compensation(session, wf: Workflow, org: Organization,
 
 def _deps_status(session, wf: Workflow, action: ActionRun,
                  states: dict[int, str] | None = None) -> str:
-    deps = json.loads(action.depends_on or "[]")
+    try:
+        deps = json.loads(action.depends_on or "[]")
+    except (ValueError, TypeError):
+        return "blocked"  # unreadable deps never crash; the action is skipped
+    if not isinstance(deps, list):
+        return "blocked"
     if not deps:
         return "ready"
     # Pump callers pass the precomputed {seq: state} map (built from the
@@ -517,8 +538,17 @@ def _compensate_one(session, wf: Workflow, org: Organization, action: ActionRun,
     """COMPENSATION_PENDING -> COMPENSATING -> COMPENSATED (verified) or FAILED."""
     transition_action(session, wf, action, "COMPENSATING", worker_id, "compensating")
     session.commit()
-    inputs = json.loads(action.input_json or "{}")
-    original_output = json.loads(action.output_json or "{}")
+    try:
+        inputs = json.loads(action.input_json or "{}")
+        original_output = json.loads(action.output_json or "{}")
+    except (ValueError, TypeError):
+        _comp_failed(session, wf, action, worker_id, "UNREADABLE_STATE",
+                     "stored inputs/output are not readable JSON", False)
+        return
+    if not isinstance(inputs, dict) or not isinstance(original_output, dict):
+        _comp_failed(session, wf, action, worker_id, "UNREADABLE_STATE",
+                     "stored inputs/output have no usable shape", False)
+        return
     ctx = _ctx(org, wf, action)
     try:
         connector = get_connector(action.connector_id)
@@ -541,6 +571,10 @@ def _compensate_one(session, wf: Workflow, org: Organization, action: ActionRun,
     except ConnectorError as exc:
         _comp_failed(session, wf, action, worker_id, exc.code, str(exc), True)
         return
+    except Exception as exc:  # noqa: BLE001 - a verifier crash is never a 500
+        _comp_failed(session, wf, action, worker_id, "VERIFY_CRASHED",
+                     f"verifier crashed ({type(exc).__name__}): {exc}", True)
+        return
     if still_present:
         _comp_failed(session, wf, action, worker_id, "COMPENSATION_NOT_CONFIRMED",
                      "effect still present after compensation", True)
@@ -554,7 +588,9 @@ def _comp_failed(session, wf, action, worker_id, code, message, retryable=True) 
     attempts = _comp_attempts(action) + 1
     try:
         output = json.loads(action.output_json or "{}")
-    except ValueError:
+    except (ValueError, TypeError):
+        output = {}
+    if not isinstance(output, dict):
         output = {}
     output["_comp_attempts"] = attempts
     action.output_json = json.dumps(output)

@@ -45,6 +45,7 @@ from .sdk import (
     ActionContract,
     Connector,
     ConnectorError,
+    PreconditionFailed,
     RetryPolicy,
     check_preconditions,
     register,
@@ -192,6 +193,39 @@ def marker_for(idempotency_key: str) -> str:
     return f"<!-- reversa:{idempotency_key} -->"
 
 
+def _malformed(what: str) -> ConnectorError:
+    """Typed error for a surprising GitHub payload shape (never AssertionError)."""
+    return ConnectorError("GITHUB_MALFORMED",
+                          f"GitHub API returned an unreadable {what}",
+                          retryable=False)
+
+
+def _require_api_dict(data, what: str) -> dict:
+    if not isinstance(data, dict):
+        raise _malformed(what)
+    return data
+
+
+def _require_api_list(data, what: str) -> list:
+    if not isinstance(data, list):
+        raise _malformed(what)
+    return data
+
+
+def _require_issue_number(value, *, compensate: bool) -> int:
+    """Coerce an issue_number, failing typed on nested shapes (never 500)."""
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        if compensate:
+            raise ConnectorError(
+                "COMPENSATION_REFUSED",
+                f"cannot compensate: issue_number {value!r} is not an int",
+                retryable=False) from None
+        raise PreconditionFailed(
+            f"'issue_number' must be an int, got {value!r}") from None
+
+
 class GithubConnector(Connector):
     """Real GitHub Issues connector.
 
@@ -336,14 +370,16 @@ class GithubConnector(Connector):
                 retryable=False, status_code=response.status_code)
         if response.status_code == 204:
             return {}
-        return response.json()
+        try:
+            return response.json()
+        except ValueError as exc:
+            raise _malformed(f"JSON body on {method} {path}") from exc
 
     def _get_issue(self, client: httpx.Client, repo: str,
                    issue_number: int) -> dict:
         data = self._request(client, "GET",
                              f"/repos/{repo}/issues/{issue_number}")
-        assert isinstance(data, dict)
-        return data
+        return _require_api_dict(data, "issue payload")
 
     # -- Connector interface -----------------------------------------------
 
@@ -377,6 +413,10 @@ class GithubConnector(Connector):
         exception is a clean HTTP 404 on the issue read, which genuinely
         proves the issue does not exist.
         """
+        if not isinstance(inputs, dict) or not isinstance(output, dict):
+            raise ConnectorError("GITHUB_VERIFY_UNVERIFIABLE",
+                                 "cannot verify: inputs/output have no verifiable shape",
+                                 retryable=False)
         token = self._require_token()
         repo = str(inputs.get("repo", "") or "")
         issue_number = (output.get("issue_number")
@@ -407,8 +447,21 @@ class GithubConnector(Connector):
                     and issue.get("title") == output.get("title")
                     and issue.get("state") == "open")
         if action.action_type == "github.add_labels":
-            current = {label["name"] for label in issue.get("labels", [])}
-            return set(output.get("labels", []) or []) <= current
+            expected = output.get("labels", [])
+            if not isinstance(expected, list) or any(
+                    not isinstance(name, str) for name in expected):
+                raise ConnectorError("GITHUB_VERIFY_UNVERIFIABLE",
+                                     "cannot verify: expected labels have no usable shape",
+                                     retryable=False)
+            current_raw = issue.get("labels", [])
+            if not isinstance(current_raw, list):
+                raise _malformed("issue labels payload")
+            current = set()
+            for label in current_raw:
+                if not isinstance(label, dict) or "name" not in label:
+                    raise _malformed("issue label entry")
+                current.add(label["name"])
+            return set(expected) <= current
         if action.action_type == "github.update_issue":
             return (issue.get("number") == number
                     and issue.get("title") == output.get("title"))
@@ -420,6 +473,10 @@ class GithubConnector(Connector):
 
     def compensate(self, ctx: dict, action: ActionContract, inputs: dict,
                    output: dict) -> dict:
+        if not isinstance(inputs, dict) or not isinstance(output, dict):
+            raise ConnectorError("COMPENSATION_REFUSED",
+                                 "cannot compensate: inputs/output have no usable shape",
+                                 retryable=False)
         token = self._require_token()
         repo = inputs.get("repo", "")
         issue_number = (output.get("issue_number")
@@ -428,19 +485,27 @@ class GithubConnector(Connector):
             raise ConnectorError("COMPENSATION_REFUSED",
                                  "cannot compensate: missing repo or issue_number",
                                  retryable=False)
+        number = _require_issue_number(issue_number, compensate=True)
         require_allowed_repo(str(repo), self._allowed())
         with self._client(token) as client:
             if action.action_type == "github.create_issue":
                 self._request(client, "PATCH",
-                              f"/repos/{repo}/issues/{issue_number}",
+                              f"/repos/{repo}/issues/{number}",
                               {"state": "closed", "state_reason": "not_planned"})
-                return {"closed_issue": int(issue_number),
+                return {"closed_issue": number,
                         "note": COMPENSATE_CREATE_NOTE}
             if action.action_type == "github.add_labels":
-                for label in output.get("labels", []) or []:
+                labels = output.get("labels", [])
+                if not isinstance(labels, list) or any(
+                        not isinstance(name, str) for name in labels):
+                    raise ConnectorError(
+                        "COMPENSATION_REFUSED",
+                        "cannot compensate: labels have no usable shape",
+                        retryable=False)
+                for label in labels:
                     self._request(client, "DELETE",
-                                  f"/repos/{repo}/issues/{issue_number}/labels/{label}")
-                return {"removed_labels": output.get("labels", []) or [],
+                                  f"/repos/{repo}/issues/{number}/labels/{label}")
+                return {"removed_labels": labels,
                         "note": COMPENSATE_LABELS_NOTE}
             if action.action_type == "github.update_issue":
                 if "previous_title" not in output and "previous_body" not in output:
@@ -449,17 +514,17 @@ class GithubConnector(Connector):
                         "cannot restore update: previous values were not captured",
                         retryable=False)
                 restored = self._request(
-                    client, "PATCH", f"/repos/{repo}/issues/{issue_number}",
+                    client, "PATCH", f"/repos/{repo}/issues/{number}",
                     {"title": output.get("previous_title"),
                      "body": output.get("previous_body")})
-                assert isinstance(restored, dict)
-                return {"restored_issue": int(issue_number),
+                restored = _require_api_dict(restored, "restored issue payload")
+                return {"restored_issue": number,
                         "title": restored.get("title")}
             if action.action_type == "github.close_issue":
                 self._request(client, "PATCH",
-                              f"/repos/{repo}/issues/{issue_number}",
+                              f"/repos/{repo}/issues/{number}",
                               {"state": "open"})
-                return {"reopened_issue": int(issue_number)}
+                return {"reopened_issue": number}
             raise ConnectorError("UNKNOWN_ACTION",
                                  f"unknown action {action.action_type}",
                                  retryable=False)
@@ -467,14 +532,24 @@ class GithubConnector(Connector):
     # -- per-action implementations ----------------------------------------
 
     def _do_create(self, client: httpx.Client, inputs: dict) -> dict:
-        title = str(inputs["title"]).strip()
+        title = inputs["title"]
+        if not isinstance(title, str):
+            raise PreconditionFailed("'title' must be a string")
+        title = title.strip()
         if not title:
-            from .sdk import PreconditionFailed
             raise PreconditionFailed("title is blank")
-        body = str(inputs.get("body") or "")
+        body = inputs.get("body") or ""
+        if not isinstance(body, str):
+            raise PreconditionFailed("'body' must be a string")
+        labels = inputs.get("labels") or []
+        if not isinstance(labels, list) or any(
+                not isinstance(name, str) for name in labels):
+            raise PreconditionFailed("'labels' must be a list of strings")
         key = inputs.get("idempotency_key")
+        if key is not None and not isinstance(key, str):
+            raise PreconditionFailed("'idempotency_key' must be a string")
         if key:
-            marker = marker_for(str(key))
+            marker = marker_for(key)
             if marker not in body:
                 body = f"{body}\n\n{marker}" if body else marker
             existing = self._find_by_marker(client, inputs["repo"], marker)
@@ -483,8 +558,10 @@ class GithubConnector(Connector):
         created = self._request(client, "POST",
                                 f"/repos/{inputs['repo']}/issues",
                                 {"title": title, "body": body,
-                                 "labels": inputs.get("labels") or []})
-        assert isinstance(created, dict)
+                                 "labels": labels})
+        created = _require_api_dict(created, "created issue payload")
+        if "number" not in created:
+            raise _malformed("created issue payload (missing number)")
         return {"issue_number": created["number"], "url": created.get("html_url", ""),
                 "state": created.get("state", "open"), "title": created.get("title", title)}
 
@@ -493,8 +570,10 @@ class GithubConnector(Connector):
         """Best-effort client-side idempotency guard (first page only)."""
         data = self._request(client, "GET",
                              f"/repos/{repo}/issues?state=open&per_page=30")
-        assert isinstance(data, list)
+        data = _require_api_list(data, "issue search payload")
         for issue in data:
+            if not isinstance(issue, dict):
+                raise _malformed("issue search entry")
             if marker in (issue.get("body") or ""):
                 return {"issue_number": issue["number"],
                         "url": issue.get("html_url", ""),
@@ -506,43 +585,57 @@ class GithubConnector(Connector):
     def _do_add_labels(self, client: httpx.Client, inputs: dict) -> dict:
         labels = inputs["labels"]
         if not isinstance(labels, list) or not labels:
-            from .sdk import PreconditionFailed
             raise PreconditionFailed("labels must be a non-empty list")
+        if any(not isinstance(name, str) for name in labels):
+            raise PreconditionFailed("'labels' must be a list of strings")
+        number = _require_issue_number(inputs["issue_number"], compensate=False)
         updated = self._request(
             client, "POST",
-            f"/repos/{inputs['repo']}/issues/{inputs['issue_number']}/labels",
+            f"/repos/{inputs['repo']}/issues/{number}/labels",
             {"labels": labels})
-        assert isinstance(updated, list)
-        return {"labels": [label["name"] for label in updated]}
+        updated = _require_api_list(updated, "updated labels payload")
+        names = []
+        for label in updated:
+            if not isinstance(label, dict) or "name" not in label:
+                raise _malformed("updated label entry")
+            names.append(label["name"])
+        return {"labels": names}
 
     def _do_update(self, client: httpx.Client, inputs: dict) -> dict:
         if "title" not in inputs and "body" not in inputs:
-            from .sdk import PreconditionFailed
             raise PreconditionFailed("update needs at least one of: title, body")
-        current = self._get_issue(client, inputs["repo"],
-                                  int(inputs["issue_number"]))
+        for key in ("title", "body"):
+            if key in inputs and not isinstance(inputs[key], str):
+                raise PreconditionFailed(f"'{key}' must be a string")
+        number = _require_issue_number(inputs["issue_number"], compensate=False)
+        current = self._get_issue(client, inputs["repo"], number)
         patch: dict = {}
         if "title" in inputs:
             patch["title"] = inputs["title"]
         if "body" in inputs:
             patch["body"] = inputs["body"]
         updated = self._request(client, "PATCH",
-                                f"/repos/{inputs['repo']}/issues/{inputs['issue_number']}",
+                                f"/repos/{inputs['repo']}/issues/{number}",
                                 patch)
-        assert isinstance(updated, dict)
+        updated = _require_api_dict(updated, "updated issue payload")
+        if "number" not in updated:
+            raise _malformed("updated issue payload (missing number)")
         return {"issue_number": updated["number"], "title": updated.get("title", ""),
                 "previous_title": current.get("title"),
                 "previous_body": current.get("body")}
 
     def _do_set_state(self, client: httpx.Client, inputs: dict,
                       state: str) -> dict:
+        number = _require_issue_number(inputs["issue_number"], compensate=False)
         payload: dict = {"state": state}
         if state == "closed" and inputs.get("reason") in ("completed", "not_planned"):
             payload["state_reason"] = inputs["reason"]
         updated = self._request(client, "PATCH",
-                                f"/repos/{inputs['repo']}/issues/{inputs['issue_number']}",
+                                f"/repos/{inputs['repo']}/issues/{number}",
                                 payload)
-        assert isinstance(updated, dict)
+        updated = _require_api_dict(updated, "updated issue payload")
+        if "number" not in updated:
+            raise _malformed("updated issue payload (missing number)")
         return {"issue_number": updated["number"],
                 "state": updated.get("state", state)}
 

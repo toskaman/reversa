@@ -12,6 +12,7 @@ refuses when the resource changed incompatibly (engine -> MANUAL_REQUIRED).
 from __future__ import annotations
 
 import json
+from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException
 
@@ -26,6 +27,8 @@ from .sdk import (
     RetryPolicy,
     check_preconditions,
     register,
+    require_ref,
+    require_str,
 )
 
 
@@ -256,12 +259,32 @@ def _ref(store: str, row: dict) -> dict:
 
 
 def _check_ref(store: DemoStore, ref: dict, expect_status: str = "active") -> dict | None:
+    if not isinstance(ref, dict):
+        return None  # malformed ref never matches; callers fail closed
     row = ref and store.get(ref.get("id", -1))
     if not row or row["status"] != expect_status:
         return None
     if row["version"] != ref.get("version"):
         return None  # concurrently modified
     return row
+
+
+def _require_verifiable(output: Any, key: str = "resource") -> dict:
+    """Fail closed when a stored output has no verifiable shape.
+
+    A present-but-malformed ref (None/str/list/...) proves nothing, so it
+    raises (engine -> INDETERMINATE) instead of reading as absence proof.
+    A missing ref reads as absent (callers map it to False).
+    """
+    if not isinstance(output, dict):
+        raise ConnectorError("VERIFY_UNVERIFIABLE",
+                             "output has no verifiable shape",
+                             retryable=False)
+    if key in output and not isinstance(output[key], dict):
+        raise ConnectorError("VERIFY_UNVERIFIABLE",
+                             f"'{key}' has no verifiable shape",
+                             retryable=False)
+    return output
 
 
 class CrmConnector(Connector):
@@ -299,26 +322,29 @@ class CrmConnector(Connector):
     def execute(self, ctx: dict, action: ActionContract, inputs: dict) -> dict:
         check_preconditions(ctx, action, inputs)
         if action.action_type == "crm.validate_customer":
-            name = inputs["customer_name"].strip()
+            name = require_str(inputs, "customer_name").strip()
             if not name:
                 raise PreconditionFailed("customer_name is blank")
             return {"valid": True, "customer_name": name}
+        org_slug = require_str(inputs, "org_slug")
+        company_name = require_str(inputs, "company_name")
         row = self.db.create(
-            ctx["org_id"], "organization", inputs["org_slug"],
-            {"company_name": inputs["company_name"]},
+            ctx["org_id"], "organization", org_slug,
+            {"company_name": company_name},
             workflow_id=_ctx_run(ctx),
         )
         return {"resource": _ref("crm", row)}
 
     def verify(self, ctx: dict, action: ActionContract, inputs: dict, output: dict) -> bool:
         if action.action_type == "crm.validate_customer":
-            return bool(output.get("valid"))
+            return isinstance(output, dict) and bool(output.get("valid"))
+        _require_verifiable(output)
         return _check_ref(self.db, output.get("resource", {})) is not None
 
     def compensate(self, ctx: dict, action: ActionContract, inputs: dict, output: dict) -> dict:
         if action.action_type == "crm.validate_customer":
             return {"noop": True}
-        ref = output.get("resource", {})
+        ref = require_ref(output)
         row = self.db.set_status(ref.get("id", -1), ref.get("version", -1), "archived")
         return {"archived": _ref("crm", row)}
 
@@ -371,11 +397,13 @@ class IdentityConnector(Connector):
         check_preconditions(ctx, action, inputs)
         if action.action_type == "identity.create_workspace":
             row = self.db.create(
-                ctx["org_id"], "workspace", inputs["org_slug"], {"manager": None},
+                ctx["org_id"], "workspace", require_str(inputs, "org_slug"),
+                {"manager": None},
                 workflow_id=_ctx_run(ctx),
             )
             return {"resource": _ref("identity", row), "data": row["data"]}
         if action.action_type == "identity.provision_users":
+            workspace = require_str(inputs, "workspace")
             users = inputs["users"]
             if not isinstance(users, list) or not users:
                 raise PreconditionFailed("users must be a non-empty list")
@@ -385,27 +413,31 @@ class IdentityConnector(Connector):
                         or not user["email"].strip()):
                     raise PreconditionFailed(
                         "each user must be an object with a non-empty 'email'")
+                if "name" in user and not isinstance(user["name"], str):
+                    raise PreconditionFailed("user 'name' must be a string")
             refs = []
             for user in users:
                 row = self.db.create(
                     ctx["org_id"], "user", user["email"],
-                    {"name": user.get("name", ""), "workspace": inputs["workspace"]},
+                    {"name": user.get("name", ""), "workspace": workspace},
                     workflow_id=_ctx_run(ctx),
                 )
                 refs.append(_ref("identity", row))
             return {"users": refs}
         # assign_manager with internal read-modify-write retries on races.
+        workspace = require_str(inputs, "workspace")
+        manager_email = require_str(inputs, "manager_email")
         last_error: Exception | None = None
         for _ in range(3):
             current = self.db.get_by_name(
-                ctx["org_id"], "workspace", inputs["workspace"],
+                ctx["org_id"], "workspace", workspace,
                 workflow_id=_ctx_run(ctx),
             )
             if not current or current["status"] != "active":
-                raise PreconditionFailed(f"workspace {inputs['workspace']} not active")
+                raise PreconditionFailed(f"workspace {workspace} not active")
             try:
                 row = self.db.update_data(
-                    current["id"], current["version"], {"manager": inputs["manager_email"]}
+                    current["id"], current["version"], {"manager": manager_email}
                 )
                 return {
                     "resource": _ref("identity", row),
@@ -417,23 +449,42 @@ class IdentityConnector(Connector):
 
     def verify(self, ctx: dict, action: ActionContract, inputs: dict, output: dict) -> bool:
         if action.action_type == "identity.provision_users":
-            for ref in output.get("users", []):
+            users = output.get("users", []) if isinstance(output, dict) else None
+            if not isinstance(users, list):
+                raise ConnectorError("VERIFY_UNVERIFIABLE",
+                                     "'users' has no verifiable shape",
+                                     retryable=False)
+            for ref in users:
+                if not isinstance(ref, dict):
+                    raise ConnectorError("VERIFY_UNVERIFIABLE",
+                                         "a user ref has no verifiable shape",
+                                         retryable=False)
                 if _check_ref(self.db, ref) is None:
                     return False
-            return bool(output.get("users"))
+            return bool(users)
+        _require_verifiable(output)
         return _check_ref(self.db, output.get("resource", {})) is not None
 
     def compensate(self, ctx: dict, action: ActionContract, inputs: dict, output: dict) -> dict:
         if action.action_type == "identity.create_workspace":
-            ref = output.get("resource", {})
+            ref = require_ref(output)
             return self.db.hard_delete_if_matches(ref.get("id", -1), output.get("data", {}))
         if action.action_type == "identity.provision_users":
+            users = output.get("users", []) if isinstance(output, dict) else None
+            if not isinstance(users, list):
+                raise ConnectorError("COMPENSATION_REFUSED",
+                                     "cannot compensate: 'users' has no usable shape",
+                                     retryable=False)
             archived = []
-            for ref in output.get("users", []):
+            for ref in users:
+                if not isinstance(ref, dict):
+                    raise ConnectorError("COMPENSATION_REFUSED",
+                                         "cannot compensate: a user ref has no usable shape",
+                                         retryable=False)
                 row = self.db.set_status(ref.get("id", -1), ref.get("version", -1), "archived")
                 archived.append(_ref("identity", row))
             return {"archived_users": archived}
-        ref = output.get("resource", {})
+        ref = require_ref(output)
         previous = output.get("previous_manager")
         # Always write the key (even None): the restored document must equal
         # the forward pre-state byte-for-byte for chained compensations.
@@ -477,18 +528,23 @@ class SupportConnector(Connector):
     def execute(self, ctx: dict, action: ActionContract, inputs: dict) -> dict:
         check_preconditions(ctx, action, inputs)
         kind = "queue" if action.action_type == "support.create_queue" else "checklist"
+        org_slug = require_str(inputs, "org_slug")
+        tier = inputs.get("tier", "enterprise")
+        if not isinstance(tier, str):
+            raise PreconditionFailed("'tier' must be a string")
         row = self.db.create(
-            ctx["org_id"], kind, inputs["org_slug"],
-            {"tier": inputs.get("tier", "enterprise")},
+            ctx["org_id"], kind, org_slug,
+            {"tier": tier},
             workflow_id=_ctx_run(ctx),
         )
         return {"resource": _ref("support", row)}
 
     def verify(self, ctx: dict, action: ActionContract, inputs: dict, output: dict) -> bool:
+        _require_verifiable(output)
         return _check_ref(self.db, output.get("resource", {})) is not None
 
     def compensate(self, ctx: dict, action: ActionContract, inputs: dict, output: dict) -> dict:
-        ref = output.get("resource", {})
+        ref = require_ref(output)
         row = self.db.set_status(ref.get("id", -1), ref.get("version", -1), "archived")
         return {"archived": _ref("support", row)}
 
@@ -519,17 +575,18 @@ class BillingConnector(Connector):
     def execute(self, ctx: dict, action: ActionContract, inputs: dict) -> dict:
         check_preconditions(ctx, action, inputs)
         row = self.db.create(
-            ctx["org_id"], "billing_profile", inputs["org_slug"],
-            {"plan": inputs["plan"], "charged": False},
+            ctx["org_id"], "billing_profile", require_str(inputs, "org_slug"),
+            {"plan": require_str(inputs, "plan"), "charged": False},
             workflow_id=_ctx_run(ctx),
         )
         return {"resource": _ref("billing", row)}
 
     def verify(self, ctx: dict, action: ActionContract, inputs: dict, output: dict) -> bool:
+        _require_verifiable(output)
         return _check_ref(self.db, output.get("resource", {})) is not None
 
     def compensate(self, ctx: dict, action: ActionContract, inputs: dict, output: dict) -> dict:
-        ref = output.get("resource", {})
+        ref = require_ref(output)
         current = self.db.get(ref.get("id", -1))
         if current and current["data"].get("invoice_issued"):
             raise PreconditionFailed("invoice already issued; profile cannot be cancelled")
@@ -560,14 +617,17 @@ class NotifyConnector(Connector):
 
     def execute(self, ctx: dict, action: ActionContract, inputs: dict) -> dict:
         check_preconditions(ctx, action, inputs)
+        channel = require_str(inputs, "channel")
+        message = require_str(inputs, "message")
         row = self.db.create(
-            ctx["org_id"], "message", f"{ctx['workflow_id']}:{inputs['channel']}",
-            {"channel": inputs["channel"], "message": inputs["message"], "sent": True},
+            ctx["org_id"], "message", f"{ctx['workflow_id']}:{channel}",
+            {"channel": channel, "message": message, "sent": True},
             workflow_id=_ctx_run(ctx),
         )
         return {"resource": _ref("notify", row)}
 
     def verify(self, ctx: dict, action: ActionContract, inputs: dict, output: dict) -> bool:
+        _require_verifiable(output)
         row = self.db.get(output.get("resource", {}).get("id", -1))
         return bool(row and row["data"].get("sent") and row["status"] == "active")
 
@@ -637,10 +697,16 @@ class CoreConnector(Connector):
 
     def execute(self, ctx: dict, action: ActionContract, inputs: dict) -> dict:
         check_preconditions(ctx, action, inputs)
-        return self._run(ctx["org_id"], inputs["org_slug"], _ctx_run(ctx))
+        return self._run(ctx["org_id"], require_str(inputs, "org_slug"),
+                         _ctx_run(ctx))
 
     def verify(self, ctx: dict, action: ActionContract, inputs: dict, output: dict) -> bool:
-        fresh = self._run(ctx["org_id"], inputs["org_slug"], _ctx_run(ctx))
+        if not isinstance(output, dict):
+            raise ConnectorError("VERIFY_UNVERIFIABLE",
+                                 "output has no verifiable shape",
+                                 retryable=False)
+        fresh = self._run(ctx["org_id"], require_str(inputs, "org_slug"),
+                          _ctx_run(ctx))
         return bool(output.get("passed") and fresh["passed"])
 
     def compensate(self, ctx: dict, action: ActionContract, inputs: dict, output: dict) -> dict:

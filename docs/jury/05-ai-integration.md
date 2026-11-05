@@ -37,7 +37,9 @@ the budget is 8000 tokens — verified with 2/2 valid full plans live
 before release. The retry loop (invalid → typed errors → corrected
 plan) is also pinned offline in `test_ai_eval.py`.
 
-Eval set (30 offline cases: legit, ambiguous, contradictory, impossible,
-injection, dangerous; per-category summary in `tests/test_ai_eval.py`)
-is implemented and green; full live LLM-vs-baseline scoring runs against
-RC3 and will be reported with measured numbers only.
+Eval set (100 offline cases: 20 legit, 15 ambiguous, 12 contradictory,
+12 impossible, 18 injection, 23 dangerous; `tests/test_ai_eval.py`,
+baseline 100% schema-valid, 0% refusal) is green; the capped live
+LLM-vs-baseline runner (`REVERSA_EVAL_LIVE=1`, max 25 cases / 60k tokens,
+anonymized — see `docs/benchmarks/ai-eval-live-PROTOCOL.md`) measures
+only, and only measured numbers are published.

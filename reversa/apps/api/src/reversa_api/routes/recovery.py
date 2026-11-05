@@ -14,6 +14,10 @@ current demo-store rows.
 Verdict honesty: recorded transitions establish a claim; current rows only
 re-verify (a mismatch downgrades to a divergence); nothing is inferred —
 a missing record stays UNKNOWN/INDETERMINATE however favourable the store.
+Unchained ActionRun fields (error, output, attempt counters) never override
+chained transition evidence: uncertainty/refusal signals fail closed
+(either source triggers), ABSENT needs a chained proof or a live check,
+and compensation attempts derive from the trail.
 
 Endpoint: GET /api/v1/workflows/{wf_id}/recovery-manifest
 """
@@ -55,6 +59,14 @@ _MAY_HAVE_EFFECT = frozenset({"SUCCEEDED", "VERIFYING", "UNKNOWN_OUTCOME"})
 _UNCERTAIN_MARKERS = (
     "uncertain", "unknown", "verify error", "timeout", "timed out",
     "reconcile deferred", "resume deferred", "indeterminate",
+)
+# Chained-note markers of a RECORDED absence proof: the failure transition
+# note confirms no effect (verify returned False, or reconcile/resume
+# confirmed absence). Trusted from the chained transition note only, never
+# from the unchained ActionRun error (a DB write could soften that text).
+_ABSENCE_PROOF_MARKERS = (
+    "effect not confirmed", "effect confirmed absent", "effect absent",
+    "nothing to undo",
 )
 
 ReadResource = Callable[[str, int], dict | None]
@@ -110,6 +122,18 @@ def _comp_attempts_stored(output: Any) -> int:
 
 def _event_ref(seq: int | None) -> str | None:
     return f"event seq {seq}" if seq else None
+
+
+def _note_of(ev: dict | None) -> str:
+    """Chained transition note (authoritative over the ActionRun error)."""
+    if not ev or not isinstance(ev.get("payload"), dict):
+        return ""
+    return str(ev["payload"].get("note", "") or "")
+
+
+def _has_absence_proof(note: str) -> bool:
+    low = (note or "").lower()
+    return any(m in low for m in _ABSENCE_PROOF_MARKERS)
 
 
 class _TrailIndex:
@@ -205,7 +229,13 @@ def evaluate_recovery(
     """Pure manifest evaluator. All inputs are observed state; no I/O except
     the injected read_resource probe (DemoStore reads in production)."""
     idx = _TrailIndex(events)
-    comp_started = idx.compensation_started
+    # Spec 2.3: compensation ran iff compensation.started exists OR
+    # compensation states/transitions exist. The trail/state disjuncts keep
+    # C5 and the VERIFIED-required mapping correct if the single marker
+    # event is lost (tail truncation); in honest runs all three agree.
+    comp_started = idx.compensation_started or any(
+        a["state"] in COMP_STATES or bool(COMP_STATES & set(idx.trail(a["seq"])))
+        for a in actions)
     entries: list[dict] = []
     manual_items: list[dict] = []
     refusals: list[dict] = []
@@ -252,7 +282,12 @@ def evaluate_recovery(
         # ---- effect state per action state ----
         if state == "COMPENSATED":
             comp_ev = idx.last_to(seq, "COMPENSATED")
-            stored_attempts = _comp_attempts_stored(output)
+            # Attempts derive from the chained trail (one COMPENSATING
+            # transition per attempt); the stored counter is only a fallback
+            # for synthetic trails, never authoritative.
+            trail_attempts = trail.count("COMPENSATING")
+            attempts_total = (trail_attempts if trail_attempts
+                              else _comp_attempts_stored(output) + 1)
             if comp_ev is None:
                 effect = "UNKNOWN"
                 note = "no compensation record in evidence"
@@ -260,14 +295,14 @@ def evaluate_recovery(
                 effect = "ABSENT"
                 _observe(comp_ev, "noop_proof")
                 compensation = {"capability": capability,
-                                "attempts": stored_attempts + 1,
+                                "attempts": attempts_total,
                                 "proof_ref": _event_ref(comp_ev["seq"]),
                                 "absence_method": "noop_proof"}
             else:
                 absent, witness = _check_refs_absent(refs, read_resource, forward)
                 _observe(comp_ev, "connector_verify")
                 compensation = {"capability": capability,
-                                "attempts": stored_attempts + 1,
+                                "attempts": attempts_total,
                                 "proof_ref": _event_ref(comp_ev["seq"]),
                                 "absence_method": "verify_absent"}
                 if absent == "present":
@@ -294,8 +329,13 @@ def evaluate_recovery(
                             f"absence per compensation record {_event_ref(comp_ev['seq'])}")
         elif state == "COMPENSATION_FAILED":
             fail_ev = idx.last_to(seq, "COMPENSATION_FAILED")
-            attempts = _comp_attempts_stored(output)
-            refused_external = error.startswith("PRECONDITION_FAILED")
+            fail_note = _note_of(fail_ev)
+            attempts = (trail.count("COMPENSATING")
+                        or _comp_attempts_stored(output))
+            # Fail closed: the chained note is authoritative; the unchained
+            # ActionRun error can only ADD a refusal, never remove one.
+            refused_external = (error.startswith("PRECONDITION_FAILED")
+                                or fail_note.startswith("PRECONDITION_FAILED"))
             if fail_ev is None:
                 effect = "UNKNOWN"
                 note = "no compensation-failure record in evidence"
@@ -322,7 +362,9 @@ def evaluate_recovery(
                 elif absent == "absent":
                     effect = "ABSENT"
                     note = "effect absent despite recorded compensation failure"
-                elif refused_external or error.startswith("COMPENSATION_NOT_CONFIRMED"):
+                elif (refused_external
+                        or error.startswith("COMPENSATION_NOT_CONFIRMED")
+                        or fail_note.startswith("COMPENSATION_NOT_CONFIRMED")):
                     effect = "PRESENT"  # refused/still-present: undo never took
                 else:
                     effect = "UNKNOWN"  # verifier error proves nothing
@@ -347,7 +389,7 @@ def evaluate_recovery(
                 effect = "UNKNOWN"
                 note = "no verification record in evidence"
             else:
-                present, _ = _check_refs_present(refs, read_resource)
+                present, missing = _check_refs_present(refs, read_resource)
                 _observe(ver_ev, "connector_verify")
                 man_ev = idx.manual_required_event(seq)
                 compensation = {"capability": capability, "attempts": 0,
@@ -355,7 +397,24 @@ def evaluate_recovery(
                                     man_ev["seq"] if man_ev else None),
                                 "absence_method": "verify_absent"}
                 if present == "absent":
+                    # Gone without a recorded undo: ABSENT by live proof, but
+                    # the surprise is a divergence (mirrors the forward
+                    # lost-effect case); nothing recorded removing it.
                     effect = "ABSENT"
+                    assert isinstance(missing, dict)
+                    row = read_resource(missing.get("store", ""),
+                                        _ref_id(missing) or -1)
+                    divergences.append({
+                        "seq": seq, "action_type": action_type,
+                        "resource": {"store": missing.get("store", ""),
+                                     "id": _ref_id(missing),
+                                     "kind": missing.get("kind"),
+                                     "name": missing.get("name")},
+                        "expected": "PRESENT",
+                        "observed": ("deleted" if row is None
+                                     else f"status={row.get('status')}"),
+                        "detail": "effect absent without recorded compensation",
+                    })
                 else:
                     effect = "PRESENT"  # verified and never undone
                 if capability in MANUAL_CAPS:
@@ -416,6 +475,7 @@ def evaluate_recovery(
                 present, witness = _check_refs_present(refs, read_resource)
                 if present == "present":
                     effect = "PRESENT"  # engine-bug path (spec 2.2)
+                    verification["method"] = "connector_verify"
                     divergences.append({
                         "seq": seq, "action_type": action_type,
                         "resource": None, "expected": "ABSENT",
@@ -426,11 +486,17 @@ def evaluate_recovery(
                     effect = "ABSENT"
         elif state == "FAILED":
             fail_ev = idx.last_to(seq, "FAILED")
+            fail_note = _note_of(fail_ev)
+            # Fail closed across sources: the chained note is authoritative
+            # for what the failure proved; the unchained ActionRun error can
+            # only ADD uncertainty, never remove it.
+            uncertain = _is_uncertain(error) or _is_uncertain(fail_note)
             _observe(fail_ev, "none")
             if any(t in _MAY_HAVE_EFFECT for t in trail):
                 absent, witness = _check_refs_absent(refs, read_resource, forward)
                 if absent == "present":
                     effect = "PRESENT"
+                    verification["method"] = "connector_verify"
                     assert witness is not None
                     divergences.append({
                         "seq": seq, "action_type": action_type,
@@ -442,23 +508,34 @@ def evaluate_recovery(
                         "observed": f"PRESENT (status={witness.get('status')})",
                         "detail": "failed action left an effect behind",
                     })
-                elif absent == "absent":
+                elif absent == "absent" and fail_ev is not None:
+                    # Live absence proof for a recorded failure.
                     effect = "ABSENT"
-                elif ("_failure" in forward or isinstance(output, dict)
-                      and "_failure" in output) and not _is_uncertain(error):
-                    effect = "ABSENT"  # certain failure, nothing observed
-                elif not _is_uncertain(error) and not refs:
+                    verification["method"] = "connector_verify"
+                elif (fail_ev is not None and not uncertain
+                        and _has_absence_proof(fail_note)):
+                    # No refs to re-check, but the chained failure record
+                    # itself confirms absence (verify returned False, or
+                    # reconcile/resume confirmed absent).
                     effect = "ABSENT"
                 else:
+                    # A SUCCEEDED/VERIFYING/UNKNOWN_OUTCOME trail means an
+                    # effect may exist; without refs to re-check and without
+                    # a recorded absence proof it stays UNKNOWN — a retry
+                    # overwrites output refs, so "certain + no refs" proves
+                    # nothing about the earlier attempt's effect.
                     effect = "UNKNOWN"
                     note = f"failure record shows a possible partial effect ({error[:120]})"
             elif fail_ev is None:
                 effect = "UNKNOWN"
                 note = "no failure record in evidence"
-            elif _is_uncertain(error):
+            elif uncertain:
                 effect = "UNKNOWN"
                 note = f"failure is inconclusive ({error[:120]})"
             else:
+                # Certain failure before any effect: the failure record is
+                # the positive no-effect proof (mirrors the SKIPPED
+                # exception to "method none ⟹ UNKNOWN").
                 effect = "ABSENT"  # certain failure before any effect
         else:
             last = idx.last_for(seq)
@@ -617,11 +694,11 @@ def evaluate_recovery(
         rule, confidence = "C5", "VERIFIED_WITH_COMPENSATION"
         decision = "every completed effect was undone and proven gone"
     elif not comp_started and all_restored:
+        # C6 subsumes the C7-VERIFIED fallthrough in v1: no C-rule branches
+        # on workflow_state (spec 4.4), so a clean FAILED run also lands
+        # here with rule C6 rather than C7. Same confidence either way.
         rule, confidence = "C6", "VERIFIED"
         decision = "nothing broke; every required effect is proven in place"
-    elif all_restored and not comp_started:
-        rule, confidence = "C7", "VERIFIED"  # unreachable; kept for spec parity
-        decision = "fallthrough: all restored, no compensation ran"
     else:
         rule, confidence = "C7", "INDETERMINATE"
         decision = "fallthrough: non-restored effects without manual/exhausted cause"
@@ -733,6 +810,18 @@ def get_recovery_manifest(wf_id: int, org: OrgCtx = Depends(get_current_org),
             .order_by(Event.seq)).all()
     ]
     ok, _bad_seq, message = verify_chain(session, wf.id)
+    if ok and not any(
+            e["type"] == "workflow.state"
+            and isinstance(e["payload"], dict)
+            and e["payload"].get("to") == wf.state
+            for e in events):
+        # Prefix-valid but the terminal marker is gone: naive tail
+        # truncation (deleting trailing rows) keeps the remaining prefix
+        # hash-consistent, so the missing marker is the tell. Force C0: an
+        # incomplete record cannot back a clean claim.
+        ok, message = False, (
+            f"chain prefix valid ({len(events)} events) but no terminal "
+            f"marker for state {wf.state}: possible trailing truncation")
     chain = {
         "valid": ok,
         "events": len(events),

@@ -37,6 +37,16 @@ def test_validate_rejects_non_object_users():
     assert issues == []
 
 
+def test_validate_rejects_empty_users():
+    """users=[] provisions nothing: reject at plan time (422), mirroring the
+    executor's PreconditionFailed — P0-3 validator/executor parity."""
+    _, _, issues = validate_plan({"steps": [
+        {"action_type": "identity.provision_users", "connector_id": "demo-identity",
+         "inputs": {"workspace": "w", "users": []}, "depends_on": []}]})
+    assert any(i.code == "BAD_INPUT_TYPE" and i.field == "inputs.users"
+               for i in issues), issues
+
+
 def test_validate_rejects_unknown_action_bad_deps():
     _, _, issues = validate_plan({"steps": [
         {"action_type": "nope.doit", "connector_id": "demo-crm",

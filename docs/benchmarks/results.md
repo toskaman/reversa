@@ -28,6 +28,8 @@ against production, sequential runs, asserts success + valid chains).
 - No load testing beyond sequential runs (campaigns 25/50/100 not run).
 - No P50/P95 under concurrency; single in-process worker by design (P0).
 - Timings include ~30–60 ms of client↔Paris network; server-side is lower.
-- Inference cost/latency not measured (no inference key; deterministic used).
+- Bench campaigns use the deterministic planner (`use_ai: false`);
+  inference measured separately: direct chat 761 ms, live intent ~7.7 s
+  wall (see `docs/jury/05-ai-integration.md`).
 
 Reproduce: set `--base`/`--token`, run the script. Raw JSON is the output.

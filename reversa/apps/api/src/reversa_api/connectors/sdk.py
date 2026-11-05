@@ -136,8 +136,49 @@ def chaos_error(connector_id: str, action_type: str, fault: str) -> ChaosTrigger
     return ChaosTriggered("CHAOS_UNKNOWN", f"chaos: unknown fault {fault}", retryable=False)
 
 
+def require_inputs_dict(inputs: Any) -> dict:
+    """Return inputs iff it is a dict, else fail typed (never TypeError)."""
+    if not isinstance(inputs, dict):
+        raise PreconditionFailed("inputs must be an object")
+    return inputs
+
+
+def require_str(inputs: dict, key: str) -> str:
+    """Return inputs[key] iff it is a str, else fail typed (never 500).
+
+    Call after check_preconditions(): presence is already established, this
+    guards the nested-shape case (dict/list/int where a string belongs).
+    """
+    require_inputs_dict(inputs)
+    value = inputs.get(key)
+    if not isinstance(value, str):
+        raise PreconditionFailed(f"'{key}' must be a string")
+    return value
+
+
+def require_str_list(inputs: dict, key: str) -> list:
+    """Return inputs[key] iff it is a list of str, else fail typed."""
+    require_inputs_dict(inputs)
+    value = inputs.get(key)
+    if not isinstance(value, list) or any(
+            not isinstance(item, str) for item in value):
+        raise PreconditionFailed(f"'{key}' must be a list of strings")
+    return value
+
+
+def require_ref(output: Any, key: str = "resource") -> dict:
+    """Return output[key] iff it is a dict ref, else refuse compensation."""
+    ref = output.get(key, {}) if isinstance(output, dict) else None
+    if not isinstance(ref, dict):
+        raise ConnectorError("COMPENSATION_REFUSED",
+                             f"cannot compensate: '{key}' has no usable ref shape",
+                             retryable=False)
+    return ref
+
+
 def check_preconditions(ctx: dict, contract: ActionContract, inputs: dict) -> None:
     """Validate declared preconditions that the engine can check generically."""
+    require_inputs_dict(inputs)
     for pre in contract.preconditions:
         if pre.startswith("input_has:"):
             key = pre.split(":", 1)[1]

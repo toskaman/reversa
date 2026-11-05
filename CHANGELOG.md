@@ -10,6 +10,64 @@ Skips in all releases are the same two honest conditional skips
 (Vultr live-provider eval, GitHub live cycle); no Vultr/GitHub secrets
 were present in the environment when the counts were observed.
 
+## RC4 — Cycle 1 merge + P0 hardening (0.2.0-rc.4)
+
+- Commit: `TBD` ("V3 Cycle 1 merge + P0 fixes (0.2.0-rc.4)"), tag
+  `v0.2.0-rc.4`, 2026-11-05. (Hash + CI recorded in the follow-up
+  release-record commit once CI is green.)
+- API suite: **363 passed, 2 skipped, 0 failed** — 365 collected.
+  Delta +105 vs RC3 (Cycle 1 agent suites + P0 repro tests, all observed
+  on the merged tree before commit).
+- CI: 4/4 jobs (api, web, docker, secrets-scan) — result pending.
+- Web: `tsc --noEmit` clean, `next build` 13/13 pages.
+
+### Added (V3 Cycle 1, merged)
+
+- Structured agentic refusals: Vultr provider may emit `meta.refusal`
+  → typed `OUT_OF_SCOPE` / `NEEDS_CLARIFICATION` carried by the
+  existing 422 PLAN_REJECTED path, no route change
+  (`tests/test_agentic_refusal.py`, 9 tests).
+- AI eval matrix 30 → 100 offline cases + capped live runner
+  (`REVERSA_EVAL_LIVE` gate, 25 cases / 60k tokens caps, anonymized)
+  and `docs/benchmarks/ai-eval-live-PROTOCOL.md`.
+- Live eval report `docs/benchmarks/ai-eval-live-RESULTS.md`:
+  deepseek-v4.1-flash-1017, n=30, 29/30 accepted (7 via
+  validator-feedback retry, 1 honest EMPTY_PLAN rejection), P50 6.8 s,
+  87k tokens; baseline 100%/0% (template, never refuses).
+- Typed nested-shape guards across all 14 actions + engine
+  (`tests/test_nested_shapes.py`, 42 tests, red→green).
+- Recovery verdict hardening F1–F9 + `tests/test_recovery_verdicts.py`
+  (13 tests); +21 GitHub contract tests; +2 chaos-on-AI-path tests.
+- `docs/benchmarks/load-protocol.md` (concurrency campaigns, isolated
+  env required); jury docs synced to rc.3 state; LabLab text + V3
+  storyboard (re-render pending supervised session).
+- Recovery UX: truncation notice on the 500-event feed; workflow
+  detail loading/error/retry states.
+
+### Fixed (P0, reproduced first)
+
+- P1-1 (was crash): compensation starting while a retry was scheduled
+  raised `InvalidTransition RETRY_SCHEDULED -> SKIPPED` (HTTP 500 on
+  resume). `RETRY_SCHEDULED` may now transition to `SKIPPED`
+  (scheduled retry dropped, never executed), with a natural-sequence
+  repro test (crash → verifier-down → FAILED sibling → resume →
+  COMPENSATED, chain valid).
+- R1 investigated, NOT reproduced: `RETRYING -> VERIFYING` cannot fire
+  through any natural pump sequence (step 3 restores RUNNING on the
+  retried action's own ready-path; proof in code review). Pinned by a
+  last-action-retry → COMPLETED regression test instead of an
+  untestable transition. No code change.
+- P0-3: `users: []` passed validation but failed at execution
+  (PreconditionFailed). Validator now rejects empty `users` at plan
+  time (422, validator/executor parity).
+- P0-2: public guest-mint bucket was global behind Caddy (one 5/hour
+  bucket for all visitors). Buckets are now per visitor IP via the
+  last X-Forwarded-For entry when the peer is a trusted proxy
+  (`REVERSA_TRUSTED_PROXIES`, default loopback + private ranges);
+  forged headers from untrusted peers are ignored (5 tests, incl.
+  route-level per-visitor independence). JuryLaunch shows an honest
+  rate-limit message on 429 instead of the owner-token fallback.
+
 ## RC3 — AI planning reliable live (0.2.0-rc.3)
 
 - Commit: `25a6142` ("AI reliability: users-shape prompt rule + 8k

@@ -8,7 +8,7 @@ in the spec. Re-check the dashboard before the final pitch. No copied code.
 
 | Criterion | REVERSA (proven) | Temporal | n8n / Zapier | Gap | Action |
 |---|---|---|---|---|---|
-| AI planning → executable plan | Deterministic default + strict validation; Vultr optional (401 w/o key) | None (code-first) | Basic AI builders, weakly validated | Partial lead | Get inference key; publish eval |
+| AI planning → executable plan | Deterministic default + strict validation; Vultr live in prod (deepseek-v4.1-flash-1017, honest fallback) | None (code-first) | Basic AI builders, weakly validated | Partial lead | Publish live eval scores |
 | Verified execution | Every effect re-checked (tests+E2E) | Durable execution, app-level checks | At-most-once steps, no verify | Lead | Keep proving with resources |
 | Typed compensation | 6 levels, verified, refused-when-unsafe | Sagas hand-written | Manual error paths | Lead | Demo the refusal live |
 | Reconciliation | UNKNOWN→verify→idempotent retry | Idempotency patterns | Re-run duplicates | Lead | Chaos matrix in docs |
@@ -23,7 +23,7 @@ in the spec. Re-check the dashboard before the final pitch. No copied code.
 | Technical execution | 9 | 19 pytest + 9 E2E + prod E2E | Real connector | GitHub test connector |
 | Reliability | 9 | Chaos 5/5, reboot OK, races | Load campaigns | Bench 25+ wf |
 | Security | 8 | 7 tests, isolation, approvals | Rate limits, CSRF audit | Add limits |
-| AI integration | 6 | Pipeline + strict validation + eval | Working LLM key | Inference key |
+| AI integration | 6 | Pipeline + strict validation + eval + live prod plans | Live eval scores unpublished | Capped live run + publish |
 | Product experience | 8 | 10 screens, SSE, a11y basics | Polish, mobile pass | Jury dry-run |
 | Originality | 9 | Typed comp + evidence + preview | — | Keep messaging sharp |
 | Business value | 7 | Cases + ROI calc + hypotheses | Buyer validation | Post-event interviews |

@@ -23,9 +23,9 @@ and support. No pricing is final; no revenue, customers, or ROI are claimed.
 → execute, owner token only as fallback) → connect one real system in a
 sandbox → paid pilot measured on recovery hours saved.
 
-**Measured proof behind the pitch (V2-03):** 204-test API suite green
-(2 honest skips), chaos matrix 13/20 scenarios covered, 30-case planner
-eval in-repo (baseline 100% schema-valid, 0% refusal — a stated limitation).
+**Measured proof behind the pitch (RC4 v0.2.0-rc.4):** 363-test API suite
+green (2 honest skips), chaos matrix 20/20, 100-case planner eval in-repo
+(baseline 100% schema-valid, 0% refusal — a stated limitation).
 
 **Interactive calculator:** the live `/roi` page implements §15.3 with
 editable hypotheses and the measured demo recovery rate (100%, n=5 chaos

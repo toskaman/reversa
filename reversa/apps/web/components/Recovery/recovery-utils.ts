@@ -147,6 +147,22 @@ export function formatMs(ms: number | null): string {
   return `${Math.floor(s / 60)}m ${Math.round(s % 60)}s`;
 }
 
+/**
+ * Max events fetched by Recovery views (?limit=500). The API caps limit at
+ * 500 (list_events) and returns no total/has_more, so a full page means the
+ * stream may be truncated: phases, counts and spans then cover only the
+ * fetched prefix, never the whole run.
+ */
+export const EVENTS_FETCH_LIMIT = 500;
+
+/** Non-null honesty notice when the event list may be truncated. */
+export function eventsTruncationNotice(events: Evt[]): string | null {
+  return events.length >= EVENTS_FETCH_LIMIT
+    ? `First ${EVENTS_FETCH_LIMIT} events shown — stream may be truncated; ` +
+      "phases, counts and spans cover only what was fetched."
+    : null;
+}
+
 export function payloadSeq(e: Evt): string {
   const seq = e.payload["seq"];
   return typeof seq === "number" ? `seq ${seq}` : "";

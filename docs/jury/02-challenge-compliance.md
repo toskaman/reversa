@@ -13,5 +13,6 @@ production-style web app on Vultr.
 | Real executed results | Resources created/verified/compensated in isolated per-service states; before/during/after visible |
 | Submission artifacts | Public URL, demo video + subtitles, slides, cover, gallery (this dossier) |
 
-Serverless Inference is optional for Challenge 2: integrated as a provider
-with honest fallback (see 05). Original code, MIT license.
+Serverless Inference is live in prod (`deepseek-v4.1-flash-1017`) behind
+the same strict validation, with honest deterministic fallback (see 05).
+Original code, MIT license.

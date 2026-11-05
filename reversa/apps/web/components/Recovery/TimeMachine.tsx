@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { api, apiBase } from "../../lib/api";
 import type { Action, Evt, Workflow } from "../../lib/types";
 import StatusBadge from "../StatusBadge";
-import { payloadSeq, splitPhases } from "./recovery-utils";
+import { eventsTruncationNotice, payloadSeq, splitPhases } from "./recovery-utils";
 
 function PhaseColumn({ title, events, emptyHint }: {
   title: string; events: Evt[]; emptyHint: string;
@@ -99,6 +99,9 @@ export default function TimeMachine({ workflowId }: { workflowId: number }) {
           : `First failure marker at event #${phases.failureSeq}.`}
       </p>
       {error && <p className="muted">{error}</p>}
+      {eventsTruncationNotice(events) && (
+        <p className="muted">⚠ {eventsTruncationNotice(events)}</p>
+      )}
       <div>
         <button className="ghost" onClick={toggleLive}>
           {live ? "Stop live" : "Watch live"}</button>

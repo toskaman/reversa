@@ -547,3 +547,296 @@ def test_live_create_label_update_close_cycle(ctx):
     finally:
         connector.compensate(ctx, connector.contract_for("github.create_issue"),
                              {"repo": repo}, created)
+
+
+# -- 07-CONNECTORS audit (Cycle 1 V3): missing offline contract tests --------
+# All offline (MockTransport), no secret. Gaps closed: verify False-paths
+# beyond 404, non-int refs, 429/timeout/transport mapping, scope surfacing,
+# token precedence, marker embedding, precondition edges, saga tri-state wire.
+
+def test_verify_mismatch_title_returns_false(ctx):
+    """A clean read with wrong title proves absence of the expected state."""
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, json=dict(ISSUE, title="something-else"))
+
+    connector = GithubConnector(transport=httpx.MockTransport(handler),
+                                allowed_repos=("o/r",))
+    action = connector.contract_for("github.create_issue")
+    assert connector.verify(ctx, action, {"repo": "o/r"},
+                            {"issue_number": 7, "title": "hello"}) is False
+
+
+def test_verify_close_on_open_issue_returns_false(ctx):
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, json=dict(ISSUE, state="open"))
+
+    connector = GithubConnector(transport=httpx.MockTransport(handler),
+                                allowed_repos=("o/r",))
+    action = connector.contract_for("github.close_issue")
+    assert connector.verify(ctx, action, {"repo": "o/r"},
+                            {"issue_number": 7}) is False
+
+
+def test_verify_missing_label_returns_false(ctx):
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, json=dict(ISSUE))
+
+    connector = GithubConnector(transport=httpx.MockTransport(handler),
+                                allowed_repos=("o/r",))
+    action = connector.contract_for("github.add_labels")
+    assert connector.verify(ctx, action, {"repo": "o/r", "issue_number": 7},
+                            {"labels": ["reversa"]}) is False
+
+
+def test_verify_update_title_mismatch_returns_false(ctx):
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, json=dict(ISSUE, title="hello"))
+
+    connector = GithubConnector(transport=httpx.MockTransport(handler),
+                                allowed_repos=("o/r",))
+    action = connector.contract_for("github.update_issue")
+    assert connector.verify(ctx, action, {"repo": "o/r", "issue_number": 7},
+                            {"title": "renamed"}) is False
+
+
+def test_verify_non_int_issue_number_raises(ctx, offline):
+    action = offline.contract_for("github.create_issue")
+    with pytest.raises(ConnectorError) as excinfo:
+        offline.verify(ctx, action, {"repo": "o/r"},
+                       {"issue_number": "not-an-int"})
+    assert excinfo.value.code == "GITHUB_VERIFY_UNVERIFIABLE"
+    assert excinfo.value.retryable is False
+
+
+def test_429_maps_retryable_with_structured_status(ctx):
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(429, json={"message": "rate limited"})
+
+    connector = GithubConnector(transport=httpx.MockTransport(handler),
+                                allowed_repos=("o/r",))
+    action = connector.contract_for("github.create_issue")
+    with pytest.raises(ConnectorError) as excinfo:
+        connector.execute(ctx, action, {"repo": "o/r", "title": "t"})
+    assert excinfo.value.code == "GITHUB_RETRYABLE"
+    assert excinfo.value.retryable is True
+    assert excinfo.value.status_code == 429
+
+
+def test_timeout_maps_uncertain_retryable(ctx):
+    def handler(request: httpx.Request) -> httpx.Response:
+        raise httpx.TimeoutException("simulated timeout")
+
+    connector = GithubConnector(transport=httpx.MockTransport(handler),
+                                allowed_repos=("o/r",))
+    action = connector.contract_for("github.create_issue")
+    with pytest.raises(ConnectorError) as excinfo:
+        connector.execute(ctx, action, {"repo": "o/r", "title": "t"})
+    assert excinfo.value.code == "GITHUB_TIMEOUT"
+    assert excinfo.value.retryable is True
+    assert excinfo.value.uncertain is True
+
+
+def test_connect_error_maps_retryable_transport(ctx):
+    def handler(request: httpx.Request) -> httpx.Response:
+        raise httpx.ConnectError("simulated connect error")
+
+    connector = GithubConnector(transport=httpx.MockTransport(handler),
+                                allowed_repos=("o/r",))
+    action = connector.contract_for("github.create_issue")
+    with pytest.raises(ConnectorError) as excinfo:
+        connector.execute(ctx, action, {"repo": "o/r", "title": "t"})
+    assert excinfo.value.code == "GITHUB_TRANSPORT"
+    assert excinfo.value.retryable is True
+
+
+def test_403_scopes_surface_as_non_retryable_api_error(ctx):
+    """No pre-flight scope check: insufficient scopes surface via the API."""
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(
+            403, json={"message": "Resource not accessible by integration"})
+
+    connector = GithubConnector(transport=httpx.MockTransport(handler),
+                                allowed_repos=("o/r",))
+    action = connector.contract_for("github.create_issue")
+    with pytest.raises(ConnectorError) as excinfo:
+        connector.execute(ctx, action, {"repo": "o/r", "title": "t"})
+    assert excinfo.value.code == "GITHUB_API_ERROR"
+    assert excinfo.value.retryable is False
+    assert excinfo.value.status_code == 403
+
+
+def test_resolve_token_precedence_and_empty_skip(monkeypatch):
+    _clear_github_env(monkeypatch)
+    monkeypatch.setenv("GH_TOKEN", "third")
+    monkeypatch.setenv("GITHUB_TOKEN", "second")
+    monkeypatch.setenv("REVERSA_GITHUB_TOKEN", "first")
+    assert resolve_token() == "first"
+    monkeypatch.delenv("REVERSA_GITHUB_TOKEN")
+    assert resolve_token() == "second"
+    monkeypatch.setenv("REVERSA_GITHUB_TOKEN", "")  # empty is skipped
+    assert resolve_token() == "second"
+    monkeypatch.delenv("GITHUB_TOKEN")
+    assert resolve_token() == "third"
+
+
+def test_offline_transport_needs_no_token_env(ctx, monkeypatch):
+    _clear_github_env(monkeypatch)
+    connector = GithubConnector(transport=_mock_transport(),
+                                allowed_repos=("o/r",))
+    out = connector.execute(ctx, connector.contract_for("github.create_issue"),
+                            {"repo": "o/r", "title": "hello"})
+    assert out["issue_number"] == 7
+
+
+def test_create_embeds_marker_in_post_body(ctx):
+    import json as _json
+
+    posted: dict = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        if request.method == "GET":
+            return httpx.Response(200, json=[])
+        posted.update(_json.loads(request.content.decode() or "{}"))
+        return httpx.Response(201, json=dict(ISSUE))
+
+    connector = GithubConnector(transport=httpx.MockTransport(handler),
+                                allowed_repos=("o/r",))
+    connector.execute(ctx, connector.contract_for("github.create_issue"),
+                      {"repo": "o/r", "title": "t", "idempotency_key": "k-marker"})
+    assert "<!-- reversa:k-marker -->" in posted.get("body", "")
+
+
+def test_create_without_key_skips_scan(ctx):
+    seen: list = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen.append(request.method)
+        assert request.method == "POST", "no key -> no pre-scan GET"
+        return httpx.Response(201, json=dict(ISSUE))
+
+    connector = GithubConnector(transport=httpx.MockTransport(handler),
+                                allowed_repos=("o/r",))
+    out = connector.execute(ctx, connector.contract_for("github.create_issue"),
+                            {"repo": "o/r", "title": "t"})
+    assert out["issue_number"] == 7
+    assert seen == ["POST"]
+
+
+def test_create_does_not_duplicate_existing_marker(ctx):
+    import json as _json
+
+    posted: dict = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        if request.method == "GET":
+            return httpx.Response(200, json=[])
+        posted.update(_json.loads(request.content.decode() or "{}"))
+        return httpx.Response(201, json=dict(ISSUE))
+
+    connector = GithubConnector(transport=httpx.MockTransport(handler),
+                                allowed_repos=("o/r",))
+    connector.execute(ctx, connector.contract_for("github.create_issue"),
+                      {"repo": "o/r", "title": "t",
+                       "body": "hello\n\n<!-- reversa:kdup -->",
+                       "idempotency_key": "kdup"})
+    assert posted.get("body", "").count("<!-- reversa:kdup -->") == 1
+
+
+def test_create_blank_title_refuses(ctx, offline):
+    action = offline.contract_for("github.create_issue")
+    with pytest.raises(PreconditionFailed):
+        offline.execute(ctx, action, {"repo": "o/r", "title": "   "})
+
+
+def test_compensate_update_without_previous_refuses(ctx, offline):
+    action = offline.contract_for("github.update_issue")
+    with pytest.raises(ConnectorError) as excinfo:
+        offline.compensate(ctx, action, {"repo": "o/r", "issue_number": 7},
+                           {"issue_number": 7, "title": "x"})
+    assert excinfo.value.code == "COMPENSATION_REFUSED"
+
+
+def test_execute_unknown_action_raises(ctx, offline):
+    import dataclasses
+
+    action = offline.contract_for("github.create_issue")
+    unknown = dataclasses.replace(action, action_type="github.nope")
+    with pytest.raises(ConnectorError) as excinfo:
+        offline.execute(ctx, unknown, {"repo": "o/r", "title": "t"})
+    assert excinfo.value.code == "UNKNOWN_ACTION"
+
+
+def test_add_labels_empty_or_nonlist_refuses(ctx, offline):
+    action = offline.contract_for("github.add_labels")
+    with pytest.raises(PreconditionFailed):
+        offline.execute(ctx, action, {"repo": "o/r", "issue_number": 7,
+                                      "labels": []})
+    with pytest.raises(PreconditionFailed):
+        offline.execute(ctx, action, {"repo": "o/r", "issue_number": 7,
+                                      "labels": "nope"})
+
+
+def test_update_without_title_nor_body_refuses(ctx, offline):
+    action = offline.contract_for("github.update_issue")
+    with pytest.raises(PreconditionFailed):
+        offline.execute(ctx, action, {"repo": "o/r", "issue_number": 7})
+
+
+def test_saga_maps_github_raise_to_indeterminate(monkeypatch):
+    """Close the documented R1 wire gap: raising verify -> INDETERMINATE."""
+    import json as _json
+    from types import SimpleNamespace
+
+    from reversa_api.engine.saga import VerificationOutcome, _verify_effect
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(500, json={"message": "boom"})
+
+    connector = GithubConnector(transport=httpx.MockTransport(handler),
+                                allowed_repos=("o/r",))
+    monkeypatch.setitem(REGISTRY, "github", connector)
+    org = SimpleNamespace(id=1, is_demo=True)
+    wf = SimpleNamespace(id=9)
+    action = SimpleNamespace(
+        input_json=_json.dumps({"repo": "o/r"}),
+        output_json=_json.dumps({"issue_number": 7, "title": "hello"}),
+        connector_id="github", action_type="github.create_issue",
+        idempotency_key="k")
+    outcome, reason = _verify_effect(org, wf, action)
+    assert outcome is VerificationOutcome.INDETERMINATE
+    assert "GITHUB_RETRYABLE" in reason
+
+
+def test_saga_maps_github_true_and_false(monkeypatch):
+    import json as _json
+    from types import SimpleNamespace
+
+    from reversa_api.engine.saga import VerificationOutcome, _verify_effect
+
+    org = SimpleNamespace(id=1, is_demo=True)
+    wf = SimpleNamespace(id=9)
+
+    def _action():
+        return SimpleNamespace(
+            input_json=_json.dumps({"repo": "o/r"}),
+            output_json=_json.dumps({"issue_number": 7, "title": "hello"}),
+            connector_id="github", action_type="github.create_issue",
+            idempotency_key="k")
+
+    monkeypatch.setitem(
+        REGISTRY, "github",
+        GithubConnector(transport=_mock_transport(), allowed_repos=("o/r",)))
+    outcome, _ = _verify_effect(org, wf, _action())
+    assert outcome is VerificationOutcome.PRESENT
+
+    def _404(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(404, json={"message": "Not Found"})
+
+    monkeypatch.setitem(
+        REGISTRY, "github",
+        GithubConnector(transport=httpx.MockTransport(_404),
+                        allowed_repos=("o/r",)))
+    outcome, _ = _verify_effect(org, wf, _action())
+    assert outcome is VerificationOutcome.ABSENT_CONFIRMED

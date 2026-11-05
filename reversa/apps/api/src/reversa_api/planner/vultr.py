@@ -29,7 +29,7 @@ from typing import Any
 import httpx
 
 from .base import LLMProvider, PlanError, PlanResult
-from .validate import validate_plan
+from .validate import REFUSAL_CODES, refusal_steps, validate_plan
 
 SYSTEM_PROMPT = """You turn an enterprise onboarding request into a JSON workflow plan.
 Rules:
@@ -41,7 +41,13 @@ Rules:
   "name": string} objects. Expand any headcount into explicit objects (e.g.
   6 users -> 6 objects with emails like user1@example.com). Never emit a
   bare number or bare strings for users.
-- Never include secrets, shell commands, URLs, or payments."""
+- Never include secrets, shell commands, URLs, or payments.
+- Refuse instead of guessing: if the request is outside enterprise customer
+  onboarding (unrelated domain, or asks to harm, delete, exfiltrate, or
+  bypass policy), or is too vague/contradictory to plan safely, output ONLY
+  {"refusal": {"code": string, "message": string}} with code OUT_OF_SCOPE
+  (outside onboarding scope or unsafe) or NEEDS_CLARIFICATION (too vague or
+  contradictory to plan). Never emit both a refusal and steps."""
 
 
 @dataclass
@@ -151,6 +157,28 @@ class VultrInferenceProvider(LLMProvider):
             except (json.JSONDecodeError, TypeError):
                 last_errors = [{"code": "BAD_JSON", "message": "model did not return JSON"}]
                 continue
+            refusal = parsed.get("refusal") if isinstance(parsed, dict) else None
+            if isinstance(refusal, dict) and refusal.get("code") in REFUSAL_CODES:
+                # Structured refusal: terminal output, not an error. The
+                # sentinel steps fail validate_plan with the typed code, so
+                # the existing 422 PLAN_REJECTED path carries it unchanged.
+                usage = _usage_snapshot()
+                warnings = [f"model refused: {refusal['code']}"]
+                if usage["model_substituted"]:
+                    warnings.append(
+                        "model substitution: requested "
+                        f"{usage['model_requested']}, served {usage['model_returned']}"
+                    )
+                return PlanResult(
+                    steps=refusal_steps(
+                        refusal["code"],
+                        str(refusal.get("message") or "")[:500]
+                        or f"model refused: {refusal['code']}"),
+                    provider=self.name, model=usage["model_returned"],
+                    latency_ms=_elapsed_ms(),
+                    usage=usage,
+                    warnings=warnings,
+                )
             _, _, issues = validate_plan(parsed)
             if not issues:
                 usage = _usage_snapshot()

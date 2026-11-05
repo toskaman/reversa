@@ -11,5 +11,7 @@ Full protocol + raw numbers: `docs/benchmarks/results.md`. Summary
 Plan P50 49 ms · evidence export P50 36 ms · chains valid 15/15.
 
 Honest limits: sequential runs only (no concurrency claims), one worker by
-design, timings include client↔Paris network, no inference measurements.
+design, timings include client↔Paris network. Bench campaigns use the
+deterministic planner (`use_ai: false`); inference is measured separately
+(direct chat 761 ms, live intent ~7.7 s wall — see 05).
 Harness committed (`reversa/tests/performance/bench.py`) — re-run anytime.

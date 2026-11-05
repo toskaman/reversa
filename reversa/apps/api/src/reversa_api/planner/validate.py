@@ -30,6 +30,25 @@ class ValidationIssue:
                 "message": self.message}
 
 
+# Structured refusal (agentic): a provider that cannot plan safely emits a
+# sentinel step instead of inventing actions. validate_plan translates it
+# into a typed ValidationIssue, so the existing 422 PLAN_REJECTED path
+# carries OUT_OF_SCOPE / NEEDS_CLARIFICATION with no route change.
+REFUSAL_ACTION = "meta.refusal"
+REFUSAL_CONNECTOR = "meta"
+REFUSAL_CODES = frozenset({"OUT_OF_SCOPE", "NEEDS_CLARIFICATION"})
+
+
+def refusal_steps(code: str, message: str) -> list[dict]:
+    """Build the sentinel step list encoding a structured refusal."""
+    return [{
+        "action_type": REFUSAL_ACTION,
+        "connector_id": REFUSAL_CONNECTOR,
+        "inputs": {"code": code, "message": message},
+        "depends_on": [],
+    }]
+
+
 def validate_plan(plan: dict) -> tuple[list[dict], bool, list[ValidationIssue]]:
     """Returns (normalized_steps, approval_required, issues). Issues empty == valid."""
     issues: list[ValidationIssue] = []
@@ -55,6 +74,18 @@ def validate_plan(plan: dict) -> tuple[list[dict], bool, list[ValidationIssue]]:
             issues.append(ValidationIssue(
                 "BAD_DEPS", i, "depends_on",
                 "depends_on must list earlier step numbers (strictly increasing DAG)"))
+            continue
+        if action_type == REFUSAL_ACTION:
+            code = inputs.get("code", "")
+            message = inputs.get("message", "")
+            if code in REFUSAL_CODES:
+                issues.append(ValidationIssue(
+                    code, i, "intent",
+                    str(message)[:500] or f"planner refused: {code}"))
+            else:
+                issues.append(ValidationIssue(
+                    "BAD_REFUSAL", i, "inputs.code",
+                    f"refusal code must be one of {sorted(REFUSAL_CODES)}"))
             continue
         try:
             connector = get_connector(connector_id)
@@ -84,6 +115,12 @@ def validate_plan(plan: dict) -> tuple[list[dict], bool, list[ValidationIssue]]:
                     f"'{key}' must be {typename}"))
         if (action_type == "identity.provision_users"
                 and isinstance(inputs.get("users"), list)):
+            # P0-3 parity: the executor rejects an empty list
+            # (PreconditionFailed); fail fast here with a 422 instead.
+            if not inputs["users"]:
+                issues.append(ValidationIssue(
+                    "BAD_INPUT_TYPE", i, "inputs.users",
+                    "'users' must be a non-empty list"))
             for j, user in enumerate(inputs["users"]):
                 if (not isinstance(user, dict)
                         or not isinstance(user.get("email"), str)

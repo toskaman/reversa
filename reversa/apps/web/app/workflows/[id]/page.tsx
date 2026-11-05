@@ -16,12 +16,15 @@ export default function WorkflowDetail({ params }: { params: Promise<{ id: strin
   const [preview, setPreview] = useState<Preview | null>(null);
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
+  const [loading, setLoading] = useState(true);
   const [tick, setTick] = useState(0);
 
   function load() {
+    setLoading(true); setError("");
     api<{ workflow: Workflow; actions: Action[] }>(`/api/v1/workflows/${id}`)
       .then((r) => { setWf(r.workflow); setActions(r.actions); })
-      .catch((e) => setError(String(e)));
+      .catch((e) => setError(e instanceof ApiError ? e.message : String(e)))
+      .finally(() => setLoading(false));
     api<Preview>(`/api/v1/workflows/${id}/preview`)
       .then(setPreview)
       .catch(() => {});
@@ -61,8 +64,24 @@ export default function WorkflowDetail({ params }: { params: Promise<{ id: strin
     finally { setBusy(false); }
   }
 
-  if (!wf) return <div><h1>Workflow #{id}</h1>{error && <div className="err">{error}</div>}
-    <p className="muted">Loading…</p></div>;
+  if (!wf) {
+    return (
+      <div>
+        <h1>Workflow #{id}</h1>
+        {loading ? (
+          <p className="muted" role="status">Loading…</p>
+        ) : error ? (
+          <div>
+            <div className="err" role="alert">{error}</div>
+            <button onClick={() => setTick((t) => t + 1)}>Retry</button>
+            <Link className="btn ghost" href="/command">Back to Command</Link>
+          </div>
+        ) : (
+          <p className="muted" role="status">Loading…</p>
+        )}
+      </div>
+    );
+  }
 
   const terminal = ["COMPLETED", "COMPENSATED", "PARTIALLY_COMPENSATED",
     "MANUAL_REQUIRED", "FAILED", "CANCELLED"].includes(wf.state);
@@ -71,16 +90,17 @@ export default function WorkflowDetail({ params }: { params: Promise<{ id: strin
     <div>
       <h1>{wf.name}</h1>
       <p className="sub">#{wf.id} · <StatusBadge state={wf.state} /> ·
-        plan <code>{wf.plan_hash.slice(0, 12)}…</code></p>
+        plan <code>{(wf.plan_hash || "").slice(0, 12)}…</code></p>
       {error && <div className="err">{error}</div>}
       <div>
         {wf.state === "AWAITING_APPROVAL" && (
-          <button onClick={approve} disabled={busy}>Approve plan</button>)}
+          <button onClick={approve} disabled={busy}>
+            {busy ? "Approving…" : "Approve plan"}</button>)}
         {wf.state === "READY" && (
           <button onClick={execute} disabled={busy}>
             {busy ? "Executing…" : "Execute now"}</button>)}
         {!terminal && <button className="danger" onClick={cancel} disabled={busy}>
-          Cancel</button>}
+          {busy ? "Working…" : "Cancel"}</button>}
         <button className="ghost" onClick={() => setTick((t) => t + 1)}>Refresh</button>
         <Link className="btn ghost" href={`/evidence/${id}`}>Evidence</Link>
       </div>
@@ -98,7 +118,7 @@ export default function WorkflowDetail({ params }: { params: Promise<{ id: strin
               <td>{a.connector_id}</td><td><StatusBadge state={a.state} /></td>
               <td>{a.attempt}/{a.max_attempts}</td>
               <td>{a.compensation_capability}</td>
-              <td className="muted">{a.error.slice(0, 120)}</td></tr>
+              <td className="muted">{(a.error || "").slice(0, 120)}</td></tr>
           ))}</tbody></table>
         </div>
       </div>

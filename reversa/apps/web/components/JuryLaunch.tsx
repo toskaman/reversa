@@ -88,6 +88,7 @@ export default function JuryLaunch() {
     let g: GuestMint | null = null;
     let via: "public" | "owner" = "public";
     const probeFailures: string[] = [];
+    let sawRateLimit = false;
     for (const path of PUBLIC_MINT_PATHS) {
       try {
         const minted = asGuestMint(await apiAs<unknown>(path, "", {
@@ -101,12 +102,24 @@ export default function JuryLaunch() {
         probeFailures.push(`${path}: bad response shape`);
       } catch (e) {
         probeFailures.push(`${path}: ${errText(e)}`);
+        if (e instanceof ApiError && e.status === 429) sawRateLimit = true;
       }
     }
 
     // 2. Fallback: owner-mint via the configured demo-owner token. Guests
     // cannot mint guests, and non-demo orgs cannot mint at all (403).
     if (!g) {
+      // A 429 means the endpoint exists but is rate-limited: say so
+      // honestly instead of misleading the juror toward an owner token.
+      if (sawRateLimit) {
+        setFailedPhase("minting");
+        setError(
+          "Guest demo sessions are temporarily rate-limited (too many " +
+            "launches at once). Please wait a few minutes, then relaunch — " +
+            "no token needed.");
+        setPhase("idle");
+        return;
+      }
       via = "owner";
       setPhase("checking");
       try {
