@@ -34,17 +34,60 @@ class ValidationIssue:
 # sentinel step instead of inventing actions. validate_plan translates it
 # into a typed ValidationIssue, so the existing 422 PLAN_REJECTED path
 # carries OUT_OF_SCOPE / NEEDS_CLARIFICATION with no route change.
+#
+# Cycle 2 contracts (spec 2026-11-05-cycle2-agentic-design.md §2/§3):
+# ambiguous intents answer HTTP 200 {status: needs_clarification,
+# questions} and off-scope intents answer {status: refused, code, reason}
+# with no workflow created. Both reuse this module: REFUSAL_CODES is the
+# contract vocabulary, refusal_steps() builds the sentinel, and
+# validate_plan() stays the authority that accepts or rejects it.
 REFUSAL_ACTION = "meta.refusal"
 REFUSAL_CONNECTOR = "meta"
-REFUSAL_CODES = frozenset({"OUT_OF_SCOPE", "NEEDS_CLARIFICATION"})
+# Code -> intent-gate offscope sub-reason / eval category:
+# - OUT_OF_SCOPE: off-domain or no actionable signal.
+# - UNSAFE_REQUEST: injection, policy violation, destructive or
+#   exfiltration phrasing. Never plannable, never clarified.
+# - IMPOSSIBLE_REQUEST: shaped like a request but unfulfillable with
+#   real capabilities (teleport, time travel, negative users).
+# - NEEDS_CLARIFICATION: ambiguous; may carry clarification questions.
+REFUSAL_CODES = frozenset({
+    "OUT_OF_SCOPE",
+    "NEEDS_CLARIFICATION",
+    "UNSAFE_REQUEST",
+    "IMPOSSIBLE_REQUEST",
+})
+
+# Spec §2: a clarification answer carries at most 3 targeted questions.
+MAX_CLARIFICATION_QUESTIONS = 3
 
 
-def refusal_steps(code: str, message: str) -> list[dict]:
-    """Build the sentinel step list encoding a structured refusal."""
+def refusal_steps(
+    code: str,
+    message: str,
+    questions: list[str] | tuple[str, ...] | str | None = None,
+) -> list[dict]:
+    """Build the sentinel step list encoding a structured refusal.
+
+    ``questions`` (NEEDS_CLARIFICATION only) is sanitized
+    deterministically: non-string/blank entries dropped, stripped, capped
+    at MAX_CLARIFICATION_QUESTIONS; omitted from inputs when empty.
+
+    The constructor stays permissive by design (unknown codes, misplaced
+    questions) — validate_plan() is the authority that rejects them.
+    """
+    inputs: dict = {"code": code, "message": message}
+    if questions:
+        if isinstance(questions, str):
+            questions = [questions]
+        kept = [q.strip() for q in questions
+                if isinstance(q, str) and q.strip()]
+        kept = kept[:MAX_CLARIFICATION_QUESTIONS]
+        if kept:
+            inputs["questions"] = kept
     return [{
         "action_type": REFUSAL_ACTION,
         "connector_id": REFUSAL_CONNECTOR,
-        "inputs": {"code": code, "message": message},
+        "inputs": inputs,
         "depends_on": [],
     }]
 
@@ -78,14 +121,26 @@ def validate_plan(plan: dict) -> tuple[list[dict], bool, list[ValidationIssue]]:
         if action_type == REFUSAL_ACTION:
             code = inputs.get("code", "")
             message = inputs.get("message", "")
-            if code in REFUSAL_CODES:
-                issues.append(ValidationIssue(
-                    code, i, "intent",
-                    str(message)[:500] or f"planner refused: {code}"))
-            else:
+            questions = inputs.get("questions")
+            if code not in REFUSAL_CODES:
                 issues.append(ValidationIssue(
                     "BAD_REFUSAL", i, "inputs.code",
                     f"refusal code must be one of {sorted(REFUSAL_CODES)}"))
+            elif questions is not None and (
+                    code != "NEEDS_CLARIFICATION"
+                    or not isinstance(questions, list)
+                    or not 1 <= len(questions) <= MAX_CLARIFICATION_QUESTIONS
+                    or any(not isinstance(q, str) or not q.strip()
+                           for q in questions)):
+                issues.append(ValidationIssue(
+                    "BAD_REFUSAL", i, "inputs.questions",
+                    "refusal questions must be a list of 1.."
+                    f"{MAX_CLARIFICATION_QUESTIONS} non-empty strings "
+                    "on NEEDS_CLARIFICATION only"))
+            else:
+                issues.append(ValidationIssue(
+                    code, i, "intent",
+                    str(message)[:500] or f"planner refused: {code}"))
             continue
         try:
             connector = get_connector(connector_id)
