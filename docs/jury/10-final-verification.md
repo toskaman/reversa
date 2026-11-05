@@ -15,7 +15,8 @@ Verified 2026-11-05 (this list is the gate; all green):
 - [x] License MIT; no copied code; deps MIT/BSD (FastAPI, Pydantic,
       SQLAlchemy, Next.js, React, Postgres, Caddy images).
 - [x] README quickstart reproduces locally without any key.
-- [x] Spend: $0 at build time; VM ≈ $0.027/h → under $3 for the event.
+- [x] Spend observed $0.28 on 2026-11-05 ($200 credit, ≈$199.72 left) —
+  compute + inference combined via account API; on track for <$3 total.
 - [ ] LabLab submission fields + deadline re-checked on the dashboard.
 - [ ] Submission completed on LabLab (requires the human's account).
 

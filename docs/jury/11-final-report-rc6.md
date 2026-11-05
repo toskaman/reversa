@@ -34,8 +34,9 @@ including documented `INDETERMINATE` / `MANUAL_REQUIRED` refusals.
   15,387 + 16,588 = 31,975 tokens, completed, no early stop.
 - Malformed AI drafts rejected 422, never executed; deterministic
   baseline remains the labeled default with explicit fallback.
-- Limits (stated): inference cost in USD unknown (tokens only, no
-  price table applied); single primary model, no secondary.
+- Limits (stated): per-call inference USD not split out (tokens only,
+  no price table applied); single primary model, no secondary.
+  Account-level spend observed $0.28 on 2026-11-05 ($200 credit).
 
 ## C. Implemented improvements (V3 commits)
 
