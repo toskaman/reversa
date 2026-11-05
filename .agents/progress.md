@@ -22,3 +22,4 @@
 - Reste (humain requis): soumission LabLab (compte), clé inference optionnelle,
   push GitHub si remote créé. VM à garder allumée (~$2 jusqu'au 8 nov).
 - Dépense constatée: ~$0.15 (VM depuis création). Aucun autre coût.
+- Reboot VM vérifié: retour automatique, données intactes (preuves matrice).
