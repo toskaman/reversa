@@ -145,7 +145,7 @@ Protocole de re-render (session supervisée, ~2 h) :
 ## 6. Unresolved (preuves manquantes, pas des affirmations)
 
 1. `demo-v3.mp4` : aucun re-render (voir §5).
-2. Liveness prod (`https://217.69.3.211.nip.io`, 200 + `db:true`) : non
+2. Liveness prod (`https://217.69.7.155.nip.io`, 200 + `db:true`) : non
    re-sondée ce cycle ; dernier vert relu = `10-final-verification.md:5-10`
    (2026-11-05).
 3. « E2E IA → COMPLETED » niveau workflow : non observé par moi ; preuves

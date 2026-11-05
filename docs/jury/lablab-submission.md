@@ -62,7 +62,7 @@ saga, self-healing, vultr, workflows
 
 ## Links
 
-- Demo: https://217.69.3.211.nip.io
+- Demo: https://217.69.7.155.nip.io
 - Code: https://github.com/toskaman/reversa
 - Video: (upload docs/jury/demo-v2.mp4 — 85 s narrated, 6 scenes, SRT included; v1 demo.mp4 kept as fallback)
 - Slides: docs/jury/slides.pdf (source: docs/jury/build_slides.py + slides.md)

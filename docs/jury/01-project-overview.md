@@ -13,6 +13,6 @@ itself — with proof.
 steps; inject a billing outage mid-run; watch detection, reverse-order
 compensation, verified restoration, and the incident report.
 
-- Live: `https://217.69.3.211.nip.io` (demo token from the team).
+- Live: `https://217.69.7.155.nip.io` (demo token from the team).
 - Challenge 2: Powering the Future of Work (HR onboarding use case).
 - Stack: FastAPI + Next.js + Postgres/SQLite, all on one Vultr VM + Caddy TLS.

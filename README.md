@@ -6,7 +6,7 @@
 **AI that doesn't just act. It makes things right.**
 **Reversible where possible. Accountable everywhere.**
 
-**Live demo: [https://217.69.3.211.nip.io](https://217.69.3.211.nip.io)**
+**Live demo: [https://217.69.7.155.nip.io](https://217.69.7.155.nip.io)**
 *(Challenge 2 — Powering the Future of Work, Vultr Agent Rush 2026)*
 
 REVERSA plans multi-system business operations with AI, executes them

@@ -81,7 +81,7 @@ contendue par agents parallèles, cf. `concurrency-results.md` §5).
 
 ## 3. Protocole de charge — ENV ISOLÉ UNIQUEMENT
 
-Interdictions : jamais contre la prod (`217.69.3.211.nip.io`) ni contre un
+Interdictions : jamais contre la prod (`217.69.7.155.nip.io`) ni contre un
 env partagé ; staging prod-shaped (Postgres `main`, 1 réplica API puis 2)
 ou loopback SQLite frais + `REVERSA_DATA_DIR` unique par run ; arrêter le
 serveur et supprimer le data dir après chaque campagne ; token passé en
