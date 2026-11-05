@@ -9,6 +9,7 @@ from __future__ import annotations
 import asyncio
 import datetime as dt
 import hashlib
+import os
 import re
 import secrets
 import threading
@@ -34,6 +35,69 @@ def hash_token(token: str) -> str:
 _MAX_TOKEN_LEN = 512
 
 
+# ---------------------------------------------------------------------------
+# V5 (AGENT-09): historic demo credential revocation.
+#
+# Audit: seed_demo_org() preserves any existing ApiToken row, ApiToken has no
+# expiry/revoked flag, and DELETE is revocation (docs/security/token-rotation
+# §2). A historic demo credential therefore stays valid until its row is
+# deleted AND its hash is blocklisted (a DB restore must not resurrect it).
+# Only SHA-256 hashes are stored here (never plaintext): in-memory set plus
+# optional REVERSA_REVOKED_TOKEN_HASHES env (comma-separated hex). Rejected
+# hashes map to the same generic 403 as unknown tokens.
+# ---------------------------------------------------------------------------
+
+_REVOKED_ENV_VAR = "REVERSA_REVOKED_TOKEN_HASHES"
+_SHA_HEX_RE = re.compile(r"^[0-9a-f]{64}$")
+_REVOKED_TOKEN_HASHES: set[str] = set()
+_REVOKED_LOCK = threading.Lock()
+# seed_demo_org() mints the first demo credential under this name; a historic
+# leaked credential therefore carries it unless it was renamed at rotation.
+_HISTORIC_DEMO_TOKEN_NAMES: tuple[str, ...] = ("demo",)
+
+
+def _env_revoked_hashes() -> set[str]:
+    raw = os.environ.get(_REVOKED_ENV_VAR, "")
+    found: set[str] = set()
+    for part in raw.split(","):
+        candidate = part.strip().lower()
+        if candidate and _SHA_HEX_RE.match(candidate):
+            found.add(candidate)
+    return found
+
+
+def is_token_hash_revoked(candidate_hash: str) -> bool:
+    """True when a SHA-256 hex hash is blocklisted (memory or env)."""
+    if not candidate_hash:
+        return False
+    with _REVOKED_LOCK:
+        if candidate_hash in _REVOKED_TOKEN_HASHES:
+            return True
+    return candidate_hash in _env_revoked_hashes()
+
+
+def revoke_token_hash(token_hash: str) -> bool:
+    """Blocklist one SHA-256 hex hash (never pass plaintext).
+
+    Returns True when newly added, False when already present.
+    Raises ValueError on non-hex shape (message carries no value).
+    """
+    normalized = (token_hash or "").strip().lower()
+    if not _SHA_HEX_RE.match(normalized):
+        raise ValueError("invalid token hash shape")
+    with _REVOKED_LOCK:
+        if normalized in _REVOKED_TOKEN_HASHES:
+            return False
+        _REVOKED_TOKEN_HASHES.add(normalized)
+        return True
+
+
+def reset_revoked_state() -> None:
+    """Tests only: drop the in-memory blocklist (env is untouched)."""
+    with _REVOKED_LOCK:
+        _REVOKED_TOKEN_HASHES.clear()
+
+
 @dataclass
 class OrgCtx:
     org_id: int
@@ -56,6 +120,8 @@ def resolve_org_from_token(token: str) -> OrgCtx:
     if len(token) > _MAX_TOKEN_LEN:
         raise HTTPException(status_code=403, detail="invalid token")
     candidate = hash_token(token)
+    if is_token_hash_revoked(candidate):
+        raise HTTPException(status_code=403, detail="invalid token")
     session = session_for("main")()
     try:
         row = session.scalar(
@@ -299,6 +365,8 @@ def sweep_expired_guests() -> dict:
 
 
 def _lookup_guest(candidate_hash: str) -> dict | None:
+    if is_token_hash_revoked(candidate_hash):
+        return None
     now = time.time()
     with _GUEST_LOCK:
         _purge_expired_guests(now)
@@ -510,9 +578,63 @@ def revoke_owner_token(org_slug: str, name: str, *, current_hash: str) -> dict:
         if len(remaining) <= 1:
             raise HTTPException(status_code=409,
                                 detail="cannot revoke the last credential")
+        revoke_token_hash(row.token_hash)
         session.delete(row)
         session.commit()
         return {"revoked": name}
+    finally:
+        session.close()
+
+
+def revoke_historic_demo_tokens(
+    org_slug: str,
+    *,
+    current_hash: str = "",
+    names: tuple[str, ...] | list[str] | None = None,
+) -> dict:
+    """V5 safe revocation for historic demo credentials (by name, no secret).
+
+    Deletes the named historic owner rows (default: the seed name) and
+    blocklists their hashes so a DB restore cannot resurrect them. Same
+    lockout guards as revoke_owner_token: refuses the caller's current
+    credential (409) and refuses to delete the last remaining credential
+    (409, mint a replacement first). Idempotent: unknown names are skipped
+    and an empty revocation returns {"revoked": [], "remaining": n}.
+    Returns only names + count (never hashes or plaintext).
+    """
+    wanted = set(_HISTORIC_DEMO_TOKEN_NAMES if names is None else names)
+    for candidate_name in wanted:
+        if not candidate_name or not _NAME_RE.match(candidate_name):
+            raise HTTPException(status_code=422, detail="invalid token name")
+    session = session_for("main")()
+    try:
+        org = session.scalar(
+            select(Organization).where(Organization.slug == org_slug))
+        if org is None:
+            raise HTTPException(status_code=404,
+                                detail="organization not found")
+        rows = session.scalars(
+            select(ApiToken).where(ApiToken.org_id == org.id)).all()
+        targets = [row for row in rows if row.name in wanted]
+        if not targets:
+            return {"revoked": [], "remaining": len(rows)}
+        for row in targets:
+            if current_hash and secrets.compare_digest(
+                    row.token_hash, current_hash):
+                raise HTTPException(
+                    status_code=409,
+                    detail="cannot revoke the credential in use; "
+                           "re-authenticate with the new credential first")
+        if len(rows) - len(targets) < 1:
+            raise HTTPException(status_code=409,
+                                detail="cannot revoke the last credential")
+        revoked_names = sorted(row.name for row in targets)
+        for row in targets:
+            revoke_token_hash(row.token_hash)
+            session.delete(row)
+        session.commit()
+        return {"revoked": revoked_names,
+                "remaining": len(rows) - len(targets)}
     finally:
         session.close()
 

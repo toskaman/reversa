@@ -1,5 +1,12 @@
 # Jury media checklist — demo V2 audit (AGENT-19, cycle 4 FINAL Ascent)
 
+> RC6 addendum (2026-11-05, AGENT-18) : releve V2-03 conserve tel quel
+> ci-dessous. Gap §5 clos : `lablab-submission.md` Video pointe
+> desormais sur `demo-v2.mp4` (85 s + SRT, v1 en repli). Reste ouvert :
+> `slides.md:3` (commentaire `.agents/smoke/` vs `gallery/`, owner
+> orchestrateur). Chiffres courants : 689 tests + 2 skips, browser
+> 10/10, galerie 12 PNG (dont 4 agentic), eval 100 cas + 2x10 live.
+
 Date: 2026-11-05. Scope: verify, do not rebuild. Base: V2-03 merged
 (`f777543` + CHANGELOG `f2a6152`); working tree otherwise dirty with
 cycle-04 work — this file is the only file this audit adds or edits.

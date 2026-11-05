@@ -78,7 +78,8 @@ Details: [docs/benchmarks/results.md](docs/benchmarks/results.md).
 ## How REVERSA uses Vultr
 
 - **Cloud Compute** — the entire product (API, worker, web, Postgres, Caddy)
-  runs on one VM; nothing executes elsewhere. ~$2 for the whole event.
+  runs on one VM; nothing executes elsewhere. Spend observed $0.28 on
+  2026-11-05 ($200 credit), on track for <$3 total (see 10).
 - **Serverless Inference** — live in prod (`deepseek-v4.1-flash-1017`,
   OpenAI-compatible, JSON mode, validated plans, honest deterministic
   fallback). Real AI plans served via guest intents (see 05).

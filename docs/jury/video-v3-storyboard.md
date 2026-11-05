@@ -7,6 +7,10 @@
 > le jury injecte la panne lui-même), **eval 100 cas + 2×10 live**
 > (31 975 tokens). S6 VO / carte finale : remplacer « 363 checks »
 > par « 689 checks ». Upload LabLab reste `demo-v2.mp4`.
+> §6 résolu RC5/RC6 : liveness prod re-sondée (healthz `0.2.0-rc.6`,
+> `10-final-verification.md` re-run 2026-11-05) ; « E2E IA → COMPLETED »
+> observé (RC5 wf80+wf81, `04-real-execution-proof.md` §8 wf45 9/9
+> VERIFIED) — l'interdit §3 correspondant est levé.
 
 Status : STORYBOARD UNIQUEMENT. Aucun média reconstruit ce cycle.
 Re-render : NON — toolchain partiellement supervisée (voir §5, verdict +
