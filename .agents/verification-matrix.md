@@ -16,6 +16,6 @@ Légende: ✅ vérifié (commande + preuve), ⬜ non fait.
 | Shadow Preview | Effets/risques/approbations affichés, limites déclarées | ✅ | endpoint + page workflow (captures) |
 | Sécurité P0 | Auth, tenant isolation, approvals, SSRF, redaction | ✅ | 7 tests sécu; 401/403/404/409 vérifiés |
 | Vultr en ligne | VM + HTTPS + /health + persistance au reboot | ✅ | https://217.69.3.211.nip.io (200 + db:true, externe) + reboot API 200 → stack revenue seule, wf2 COMPLETED 59 events + wf3 COMPENSATED 81 events, chaînes valides |
-| CI verte | Lint + unit + intégration + build web | ✅ | ci.yml écrit; pytest + tsc + build verts en local |
+| CI verte | Lint + unit + intégration + build web | ✅ | GitHub run 42045740960 success (jobs api + web) sur toskaman/reversa |
 | Dossier jury | 10 docs + README + démo rejouable | ✅ | docs/jury/00-10 + vidéo 66 s + SRT + slides + LabLab |
 | Budget | Dépensé estimé <140 USD, suivi à jour | ✅ | ~$0.15 constaté, ~$2 projetés (VM seule ressource) |
