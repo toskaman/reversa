@@ -19,3 +19,6 @@ and support. No pricing is final; no revenue, customers, or ROI are claimed.
 
 **Land motion:** 30-second demo (this app) → connect one real system in a
 sandbox → paid pilot measured on recovery hours saved.
+
+**Interactive calculator:** the live `/roi` page implements §15.3 with
+editable hypotheses and the measured 100% demo recovery rate as default.

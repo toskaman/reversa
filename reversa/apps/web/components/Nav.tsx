@@ -9,6 +9,7 @@ export default function Nav() {
       <Link href="/recovery">Recovery</Link>
       <Link href="/connectors">Connectors</Link>
       <Link href="/demo-lab">Demo Lab</Link>
+      <Link href="/roi">ROI</Link>
       <Link href="/settings">Settings</Link>
     </nav>
   );
