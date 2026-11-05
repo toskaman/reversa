@@ -161,13 +161,20 @@ def main() -> int:
                   and "onboard" not in name.lower(), f"name={name!r}")
             check(f"{tag}-ui", bool(name) and name in ui_text(),
                   "plan name visible" if name else "no plan to show")
-            # Approvable => valid executable plan (validate.py already
-            # decided at 201; approval flips AWAITING_APPROVAL -> READY).
+            # Approvable => valid executable plan. AUTO_ALLOWED templates
+            # land directly in READY (approval_required=false, no button);
+            # gated plans flip AWAITING_APPROVAL -> READY via Approve.
             if isinstance(wf, dict) and wf.get("id"):
                 try:
-                    page.get_by_role("button", name="Approve plan").click(
-                        timeout=10000)
-                    page.wait_for_selector("text=Execute now", timeout=20000)
+                    if b.get("approval_required") is False or \
+                            wf.get("state") == "READY":
+                        page.wait_for_selector("text=Execute now",
+                                               timeout=20000)
+                    else:
+                        page.get_by_role("button", name="Approve plan").click(
+                            timeout=10000)
+                        page.wait_for_selector("text=Execute now",
+                                               timeout=20000)
                     check(f"{tag}-approvable", True)
                 except Exception as e:
                     check(f"{tag}-approvable", False, str(e)[:140])
