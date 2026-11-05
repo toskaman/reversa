@@ -40,6 +40,13 @@ async def lifespan(app: FastAPI):
 app = FastAPI(title="REVERSA", version=__version__,
               description="Self-Healing AI Operations Platform", lifespan=lifespan)
 
+# P1-AUTH-02: guest restrictions, then rate limits.
+app.add_middleware(RateLimitMiddleware)
+app.add_middleware(GuestSessionMiddleware)
+# CORS is registered LAST so it runs OUTERMOST: early 403/429 answers
+# from the middlewares above must still carry ACAO headers, otherwise
+# browsers report a CORS failure instead of the real error. This also
+# lets preflights short-circuit before auth/rate-limit inspection.
 origins = [o.strip() for o in os.environ.get(
     "REVERSA_CORS", "http://localhost:3000,http://127.0.0.1:3000").split(",") if o.strip()]
 app.add_middleware(
@@ -51,9 +58,6 @@ app.add_middleware(
     # Cycle 2 §6: let the browser UI read the intent provenance headers.
     expose_headers=list(workflows_routes.PROVENANCE_HEADERS),
 )
-# P1-AUTH-02: guest restrictions run first (outermost), then rate limits.
-app.add_middleware(RateLimitMiddleware)
-app.add_middleware(GuestSessionMiddleware)
 
 
 @app.exception_handler(Exception)

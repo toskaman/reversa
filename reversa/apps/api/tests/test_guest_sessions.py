@@ -370,3 +370,29 @@ def test_v41_concurrent_intents_admit_exactly_quota(client, demo_auth):
     assert not any(t.is_alive() for t in threads)
     assert sorted(results).count(201) == 3, results
     assert set(results) <= {201, 410}, results
+
+
+def test_guest_chaos_403_carries_cors_headers(client, demo_auth):
+    """Middleware 403s must carry ACAO headers: without them the browser
+    reports a CORS failure and hides the real FORBIDDEN error."""
+    guest = _guest_auth(_mint(client, demo_auth))
+    headers = {**guest["headers"], "Origin": "http://localhost:3000"}
+    r = client.post("/api/v1/demo/chaos",
+                    json={"target_connector": "demo-billing",
+                          "fault": "http500", "times": 1},
+                    headers=headers)
+    assert r.status_code == 403, r.text
+    assert r.headers.get("access-control-allow-origin") == \
+        "http://localhost:3000", dict(r.headers)
+
+
+def test_preflight_short_circuits_before_auth(client):
+    """OPTIONS preflight needs no credential and answers CORS headers."""
+    r = client.options(
+        "/api/v1/demo/chaos",
+        headers={"Origin": "http://localhost:3000",
+                 "Access-Control-Request-Method": "POST",
+                 "Access-Control-Request-Headers": "authorization"})
+    assert r.status_code == 200, r.text
+    assert r.headers.get("access-control-allow-origin") == \
+        "http://localhost:3000", dict(r.headers)
