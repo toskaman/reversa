@@ -37,6 +37,10 @@ Rules:
 - Use ONLY action types from the capability list. Never invent actions.
 - depends_on must reference earlier step numbers (1-based) or be [].
 - Keep inputs minimal and consistent (same org_slug everywhere).
+- identity.provision_users inputs.users must be a LIST of {"email": string,
+  "name": string} objects. Expand any headcount into explicit objects (e.g.
+  6 users -> 6 objects with emails like user1@example.com). Never emit a
+  bare number or bare strings for users.
 - Never include secrets, shell commands, URLs, or payments."""
 
 
@@ -174,7 +178,9 @@ class VultrInferenceProvider(LLMProvider):
                     f"{self.base_url}/chat/completions",
                     headers={"Authorization": f"Bearer {self.api_key}"},
                     json={"model": self.model, "messages": messages,
-                          "temperature": 0, "max_tokens": 2000,
+                          # 8000: reasoning models spend most tokens thinking;
+                          # 2000 truncated plans mid-JSON (measured live).
+                          "temperature": 0, "max_tokens": 8000,
                           "response_format": {"type": "json_object"}},
                 )
         except httpx.HTTPError as exc:

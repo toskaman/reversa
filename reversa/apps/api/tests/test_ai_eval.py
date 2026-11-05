@@ -399,6 +399,30 @@ def test_vultr_retry_aggregates_usage_offline():
     assert any("accepted after 2 attempt(s)" in w for w in result.warnings)
 
 
+def test_vultr_retry_corrects_users_count_shape_offline():
+    """Live-observed failure: model emits "users": 6 (count, not objects).
+
+    First reply carries the exact bad shape seen in prod; the scripted
+    second reply is the corrected plan. The retry loop must surface the
+    typed issue to the model and accept the fix (no code change can make
+    a real model comply — this pins the loop mechanics for this shape).
+    """
+    import copy
+    bad_steps = copy.deepcopy(build_onboarding_plan())
+    for step in bad_steps:
+        if step["action_type"] == "identity.provision_users":
+            step["inputs"]["users"] = 6
+    provider = _offline_provider("qa-model", [
+        _FakeResponse(_chat_payload(json.dumps({"goal": "x", "steps": bad_steps}))),
+        _FakeResponse(_chat_payload(VALID_PLAN_JSON)),
+    ])
+    result = provider.generate("Onboard Acme", {}, available_capabilities())
+    assert result.usage["attempts"] == 2
+    assert any("accepted after 2 attempt(s)" in w for w in result.warnings)
+    _, _, issues = validate_plan({"steps": result.steps})
+    assert issues == []
+
+
 def test_vultr_failure_carries_metering():
     provider = _offline_provider("qa-model", [
         _FakeResponse({"error": "boom"}, status_code=500)])
