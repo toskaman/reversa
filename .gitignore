@@ -9,3 +9,5 @@ data/
 .env
 .next/
 .agents/smoke/*.png
+
+tsconfig.tsbuildinfo
