@@ -10,6 +10,30 @@ Skips in all releases are the same two honest conditional skips
 (Vultr live-provider eval, GitHub live cycle); no Vultr/GitHub secrets
 were present in the environment when the counts were observed.
 
+## RC2 — Vultr Inference live + AI-shape hardening (0.2.0-rc.2)
+
+- Commit: `2804f15` ("AI-shape hardening: nested users validation +
+  typed executor guard (0.2.0-rc.2)"), tag `v0.2.0-rc.2`, 2026-11-05.
+- API suite: **257 passed, 2 skipped, 0 failed** — 259 collected.
+  Delta +2 vs RC1 (nested-users regression tests).
+- CI: 4/4 jobs green on the RC commit (api, web, docker, secrets-scan).
+
+### Added
+
+- Vultr Serverless Inference operational in prod: subscription key
+  retrieved via Cloud API, `deepseek-v4.1-flash-1017` configured,
+  live `POST /api/v1/intents` returns `provider: vultr-inference`
+  (10-step plan, accepted after 2 attempts, ~7.7 s wall).
+
+### Fixed
+
+- `identity.provision_users` with AI-shaped `users` (strings instead
+  of `{email}` objects) crashed the executor with an untyped
+  `TypeError` (HTTP 500 in prod): `validate_plan` now rejects
+  non-object users at plan time (`BAD_INPUT_TYPE`, feeds the planner
+  retry loop), and the executor raises typed `PreconditionFailed`
+  (clean action FAILED, saga COMPENSATED) if one ever slips through.
+
 ## V2-04 — Guest isolation P0, zero-token Jury Mode, CM 20/20 (RC1)
 
 - Commit: `63bdada` ("V2-04: guest isolation P0, zero-token Jury Mode,

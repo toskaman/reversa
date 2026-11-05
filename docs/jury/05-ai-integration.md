@@ -13,11 +13,23 @@ Two providers behind one interface:
   metering. Falls back to deterministic with an explicit warning.
 
 Verified live on 2026-11-05: `/v1/models` lists 35 models (public endpoint).
-`chat/completions` returns 401 with a cloud API key (both `Bearer` and
-`api-key` headers tested) — an inference-scoped key is required, which we
-don't have. We report this instead of faking AI output: the engine, not the
-model, is the authority (invalid plans are rejected with typed errors).
+A cloud API key returns 401 on `chat/completions` (both `Bearer` and
+`api-key` headers tested) — inference needs its own subscription key.
+We retrieved it legitimately via the Cloud API
+(`GET /v2/inference/{id}` → `api_key`) and configured prod with
+`deepseek-v4.1-flash-1017`: direct `chat/completions` call returned
+HTTP 200 in 761 ms with usage metering.
+
+Live prod intents (`POST /api/v1/intents`, guest session, RC2):
+Globex-6-users → 201 `provider: vultr-inference`, 10 steps, "accepted
+after 2 attempt(s)", 7.7 s wall; one malformed AI draft was honestly
+rejected with 422 `PLAN_REJECTED`/`BAD_INPUT_TYPE` and never executed.
+The engine, not the model, stays the authority: invalid plans are
+rejected with typed errors, and since RC2 nested `users` shapes are
+validated both at plan time and in the executor
+(`PreconditionFailed`, clean FAILED — no 500).
 
 Eval set (30 offline cases: legit, ambiguous, contradictory, impossible,
 injection, dangerous; per-category summary in `tests/test_ai_eval.py`)
-is implemented and green; full LLM-vs-baseline scoring awaits a working key.
+is implemented and green; full live LLM-vs-baseline scoring is scheduled
+post-RC2-deploy and will be reported with measured numbers only.
