@@ -15,4 +15,4 @@ Mis à jour: 2026-11-05 (RC6).
 | R9 | Benchmarks/chiffres non prouvés | Crédibilité jury | Ne publier que le mesuré (RC10: 792 tests, 10/10, 20/20, campagnes RESULTS), config documentée | AGENT-15/19 |
 | R10 | Soumission LabLab incomplète | Non éligible | Package prêt (vidéo V2, slides, galerie 12, textes), vérification dashboard, soumission humaine pendante — ne pas déclarer soumis | AGENT-19 |
 | R11 | Heure cutoff LabLab non confirmée | Soumission tardive | Re-vérifier le dashboard avant dépôt (échéance 8 nov, heure exacte inconnue) | AGENT-19 |
-| R12 | Ancien token démo divulgué | Accès non autorisé | Mécanisme livré+testé (revocation + revoke-historic CLI, V5/RC7) ; application prod non re-confirmée — traiter comme ouvert jusqu'à preuve | AGENT-12 |
+| R12 | Ancien token démo divulgué | Accès non autorisé | V11 : inventaire prod = 1 seule ligne active (`jury`, org 1, 2026-11-05) — aucune ligne orpheline/doublon. Preuve hash-absence impossible sans la valeur divulguée (non recherchée). Action : rotation owner post-soumission via revoke-historic CLI pour clôture totale | AGENT-12 |

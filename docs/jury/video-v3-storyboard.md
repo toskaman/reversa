@@ -21,6 +21,9 @@ protocole). Fichier jury : upload LabLab reste `demo-v2.mp4`.
 > navigateur Playwright installé (`ms-playwright` vide ; piste Edge-channel
 > non construite/non prouvée, ~2 h supervisées). Décision : NO-GO, V2
 > verrouillée pour la soumission. Risque deadline > gain V3 incertain.
+>
+> V11 (2026-11-06) : re-vérifié — toujours aucun navigateur Playwright
+> ni recorder CLI. NO-GO confirmé, V2 reste l'asset de soumission.
 
 > RC4 (2026-11-05, orchestrateur) : suite 258 → **363 tests**
 > (`CHANGELOG.md` RC4). §1 reste le relevé du cycle 1 (ère rc.3) ;
