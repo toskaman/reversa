@@ -22,6 +22,16 @@ Verified 2026-11-06 (RC7 gate; all green):
   compute + inference combined via account API; on track for <$3 total.
 - [x] Pre-jury VM snapshot `complete` on 2026-11-05 (`reversa-rc4-prejury-2026-11-05`,
   restorable via Vultr dashboard/API; $0.01).
+- [x] Backup/restore tested 2026-11-06 on prod data (RC7): fresh `backup.sh`
+  pair; dump restored into an isolated temp postgres (7/7 table counts
+  identical: 53 wf / 525 actions / 3275 events; wf85 COMPLETED + wf86
+  COMPENSATED present); appdata tarball extracted, 5/5 sqlite
+  `integrity_check` OK; `reversa-api:rc.7` image booted on the restored
+  data → `/healthz` 200 `db:true`; all temp artifacts removed; prod
+  re-verified healthy from outside afterwards. Prod was never stopped.
+- [x] Concurrency RC7 on isolated loopback (2026-11-06): N=1/5/10, all
+  COMPLETED, 59 events each, CLI VALID, 0 errors. See
+  `docs/benchmarks/concurrency-results.md`.
 - [ ] LabLab submission fields + deadline re-checked on the dashboard.
 - [ ] Submission completed on LabLab (requires the human's account).
 
