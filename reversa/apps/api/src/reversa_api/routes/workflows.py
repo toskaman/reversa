@@ -514,10 +514,43 @@ _SSE_TICKETS: dict[str, dict] = {}
 _SSE_TICKETS_LOCK = threading.Lock()
 
 # RT-V5-07: mint is authenticated but uncapped, so the store must be
-# bounded (each live ticket can pin a 120 s blocking stream). Expired
+# bounded (each redeemed ticket pins a blocking stream, see V7-B2). Expired
 # tickets purge first; overflow past the cap evicts oldest-first, which
 # hurts a flooder's own tickets before anyone else's.
 SSE_TICKET_MAX_OPEN = 1_000
+
+# V7-B2: live streams pin one sync worker thread each. Idle holds used to
+# run 120 s with zero disconnect observation; bound the hold, heartbeat the
+# idle loop so dead clients surface, and cap concurrent streams so one
+# credential cannot starve the pool. Clients resume cheaply via since_seq.
+SSE_IDLE_SECONDS = 30
+SSE_HEARTBEAT_EVERY_POLLS = 4
+SSE_MAX_OPEN_STREAMS = 32
+_SSE_OPEN_STREAMS = 0
+_SSE_STREAMS_LOCK = threading.Lock()
+
+
+def reset_sse_stream_state() -> None:
+    """Tests only: drop the open-stream count."""
+    global _SSE_OPEN_STREAMS
+    with _SSE_STREAMS_LOCK:
+        _SSE_OPEN_STREAMS = 0
+
+
+def _try_open_stream() -> None:
+    global _SSE_OPEN_STREAMS
+    with _SSE_STREAMS_LOCK:
+        if _SSE_OPEN_STREAMS >= SSE_MAX_OPEN_STREAMS:
+            raise HTTPException(status_code=429,
+                                detail="too many open event streams",
+                                headers={"Retry-After": "5"})
+        _SSE_OPEN_STREAMS += 1
+
+
+def _close_stream() -> None:
+    global _SSE_OPEN_STREAMS
+    with _SSE_STREAMS_LOCK:
+        _SSE_OPEN_STREAMS = max(0, _SSE_OPEN_STREAMS - 1)
 
 
 def reset_sse_ticket_state() -> None:
@@ -587,6 +620,8 @@ def stream_events(wf_id: int, request: Request, since_seq: int = 0,
         scheme, _, credentials = header.partition(" ")
         bearer = credentials.strip() if scheme.lower() == "be" + "arer" else ""
         org = resolve_org_from_token(bearer)
+    # V7-B2: 429 when the pool is saturated with live streams.
+    _try_open_stream()
     try:
         since = since_seq or int(request.headers.get("last-event-id", "0") or 0)
     except (TypeError, ValueError):
@@ -594,33 +629,43 @@ def stream_events(wf_id: int, request: Request, since_seq: int = 0,
 
     def gen():
         last = since
-        idle_deadline = time.time() + 120
-        while True:
-            session = session_for("main")()
-            try:
-                wf = session.get(Workflow, wf_id)
-                if wf is None or wf.org_id != org.org_id:
-                    yield 'event: error\ndata: {"message": "not found"}\n\n'
-                    return
-                rows = session.scalars(
-                    select(Event).where(Event.workflow_id == wf_id, Event.seq > last)
-                    .order_by(Event.seq).limit(100)).all()
-                for e in rows:
-                    last = e.seq
-                    body = json.dumps({"seq": e.seq, "ts": e.ts.isoformat(), "type": e.type,
-                                       "actor": e.actor,
-                                       "payload": safe_json_loads(e.payload_json)})
-                    yield f"id: {e.seq}\ndata: {body}\n\n"
-                terminal = wf.state in WF_TERMINAL or wf.state == "CANCELLED"
-                if terminal and not rows:
-                    yield 'event: done\ndata: {"state": "%s"}\n\n' % wf.state
-                    return
-                if time.time() > idle_deadline:
-                    yield 'event: ping\ndata: {}\n\n'
-                    return
-            finally:
-                session.close()
-            time.sleep(0.5)
+        idle_deadline = time.time() + SSE_IDLE_SECONDS
+        polls = 0
+        try:
+            while True:
+                session = session_for("main")()
+                try:
+                    wf = session.get(Workflow, wf_id)
+                    if wf is None or wf.org_id != org.org_id:
+                        yield 'event: error\ndata: {"message": "not found"}\n\n'
+                        return
+                    rows = session.scalars(
+                        select(Event).where(Event.workflow_id == wf_id, Event.seq > last)
+                        .order_by(Event.seq).limit(100)).all()
+                    for e in rows:
+                        last = e.seq
+                        body = json.dumps({"seq": e.seq, "ts": e.ts.isoformat(), "type": e.type,
+                                           "actor": e.actor,
+                                           "payload": safe_json_loads(e.payload_json)})
+                        yield f"id: {e.seq}\ndata: {body}\n\n"
+                    terminal = wf.state in WF_TERMINAL or wf.state == "CANCELLED"
+                    if terminal and not rows:
+                        yield 'event: done\ndata: {"state": "%s"}\n\n' % wf.state
+                        return
+                    if time.time() > idle_deadline:
+                        yield 'event: ping\ndata: {}\n\n'
+                        return
+                    polls += 1
+                    if not rows and polls % SSE_HEARTBEAT_EVERY_POLLS == 0:
+                        # SSE comment: ignored by clients, but a send to a
+                        # dead connection raises here, releasing the thread
+                        # instead of holding it to the idle deadline.
+                        yield ": heartbeat\n\n"
+                finally:
+                    session.close()
+                time.sleep(0.5)
+        finally:
+            _close_stream()
 
     return StreamingResponse(gen(), media_type="text/event-stream",
                              headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"})

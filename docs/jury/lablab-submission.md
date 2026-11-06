@@ -46,8 +46,8 @@ rejected (422) and never executed, and the deterministic baseline remains
 the default with explicit fallback. Ambiguous intents get structured
 clarification, off-scope ones an explicit refusal — never a silent
 wrong template. Evals ship in-repo: 100 offline cases plus live Vultr
-campaigns (2×10 + 12-case A/B, 65,553 tokens). Release 0.2.0-rc.8 ships
-a 778-test API suite (2 honest skips), 20/20 chaos scenarios, per-run
+campaigns (2×10 + 12-case A/B, 65,553 tokens). Release 0.2.0-rc.9 ships
+a 786-test API suite (2 honest skips), 20/20 chaos scenarios, per-run
 recovery manifests — every claim re-runnable from the repo.
 
 Reversible where possible. Accountable everywhere.

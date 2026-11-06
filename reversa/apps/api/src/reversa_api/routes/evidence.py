@@ -17,7 +17,14 @@ from ..models import ActionRun, Approval, Event, Workflow, utcnow
 router = APIRouter(prefix="/api/v1", tags=["evidence"])
 
 
-def _bundle(session, wf: Workflow, org_slug: str) -> dict:
+SHARED_VIEW = "shared"
+CANONICAL_VIEW = "canonical"
+SHARED_REDACTIONS = ["workflow.name", "workflow.intent", "plan",
+                     "actions.inputs", "actions.output", "actions.error"]
+
+
+def _bundle(session, wf: Workflow, org_slug: str,
+            view: str = CANONICAL_VIEW) -> dict:
     actions = session.scalars(
         select(ActionRun).where(ActionRun.workflow_id == wf.id).order_by(ActionRun.seq)
     ).all()
@@ -29,25 +36,49 @@ def _bundle(session, wf: Workflow, org_slug: str) -> dict:
     ).all()
     # F4: verify the already-fetched events (single pass, was 2 SELECTs).
     ok, bad_seq, message = verify_chain_rows(events)
+    shared = view == SHARED_VIEW
+    plan = safe_json_loads(wf.plan_json)
+    workflow = {
+        "id": wf.id, "name": wf.name, "intent": wf.intent, "state": wf.state,
+        "plan_version": wf.plan_version, "created_by": wf.created_by,
+        "created_at": wf.created_at.isoformat(),
+        "updated_at": wf.updated_at.isoformat(),
+    }
+    if shared:
+        # V7-B1: non-chained user-controlled fields are omitted so the
+        # bundle can be posted externally; event payloads stay byte-identical
+        # so offline verification still returns VALID.
+        workflow = {
+            "id": wf.id, "name": f"workflow-{wf.id}", "state": wf.state,
+            "plan_version": wf.plan_version,
+            "created_at": wf.created_at.isoformat(),
+            "updated_at": wf.updated_at.isoformat(),
+        }
+        steps = plan.get("steps", []) if isinstance(plan, dict) else []
+        plan = {"steps": len(steps), "omitted": SHARED_VIEW}
+
+    def _action(a: ActionRun) -> dict:
+        base = {"seq": a.seq, "action_type": a.action_type,
+                "connector_id": a.connector_id, "state": a.state,
+                "attempt": a.attempt, "max_attempts": a.max_attempts,
+                "compensation_capability": a.compensation_capability}
+        if shared:
+            base["inputs_omitted"] = SHARED_VIEW
+            base["error_present"] = a.error is not None
+            return base
+        base["inputs"] = redact(safe_json_loads(a.input_json))
+        base["output"] = redact(safe_json_loads(a.output_json))
+        base["error"] = a.error
+        return base
+
     return {
         "generator": f"reversa/{__version__}",
         "exported_at": utcnow().isoformat(),
         "org_slug": org_slug,
-        "workflow": {
-            "id": wf.id, "name": wf.name, "intent": wf.intent, "state": wf.state,
-            "plan_version": wf.plan_version, "created_by": wf.created_by,
-            "created_at": wf.created_at.isoformat(),
-            "updated_at": wf.updated_at.isoformat(),
-        },
-        "plan": safe_json_loads(wf.plan_json),
-        "actions": [
-            {"seq": a.seq, "action_type": a.action_type, "connector_id": a.connector_id,
-             "state": a.state, "attempt": a.attempt, "max_attempts": a.max_attempts,
-             "compensation_capability": a.compensation_capability,
-             "inputs": redact(safe_json_loads(a.input_json)),
-             "output": redact(safe_json_loads(a.output_json)),
-             "error": a.error} for a in actions
-        ],
+        "view": view,
+        "workflow": workflow,
+        "plan": plan,
+        "actions": [_action(a) for a in actions],
         "events": [
             {"seq": e.seq, "ts": e.ts.isoformat(), "type": e.type, "actor": e.actor,
              "org_id": e.org_id,
@@ -62,11 +93,12 @@ def _bundle(session, wf: Workflow, org_slug: str) -> dict:
         "chain": {"valid": ok, "bad_seq": bad_seq, "message": message},
         "limits": ["Hash chain detects tampering; not absolute immutability alone.",
                    "Secrets are redacted at append time and re-redacted on export."],
+        "redactions": list(SHARED_REDACTIONS) if shared else [],
     }
 
 
 @router.get("/workflows/{wf_id}/evidence")
-def export_evidence(wf_id: int, format: str = "json",
+def export_evidence(wf_id: int, format: str = "json", view: str = "canonical",
                     org: OrgCtx = Depends(get_current_org), session=Depends(get_session)):
     wf = session.get(Workflow, wf_id)
     if wf is None or wf.org_id != org.org_id:
@@ -75,7 +107,11 @@ def export_evidence(wf_id: int, format: str = "json",
         raise HTTPException(
             status_code=422,
             detail=f"unsupported format {format!r}; use 'json' or 'html'")
-    bundle = _bundle(session, wf, org.slug)
+    if view not in (CANONICAL_VIEW, SHARED_VIEW):
+        raise HTTPException(
+            status_code=422,
+            detail=f"unsupported view {view!r}; use 'canonical' or 'shared'")
+    bundle = _bundle(session, wf, org.slug, view=view)
     if format == "html":
         return HTMLResponse(_render_html(bundle))
     return bundle

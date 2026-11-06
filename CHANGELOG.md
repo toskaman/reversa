@@ -10,6 +10,26 @@ Skips in all releases are the same two honest conditional skips
 (Vultr live-provider eval, GitHub live cycle); no Vultr/GitHub secrets
 were present in the environment when the counts were observed.
 
+## RC9 — SSE bounds + shareable evidence view (0.2.0-rc.9)
+
+- V7 Track B hardening, 2026-11-06 (joint API+web bump).
+- B2 SSE: idle hold 120 s → 30 s, heartbeat comments every ~2 s so dead
+  clients release the worker thread, max 32 concurrent streams (429 +
+  Retry-After past the cap); `EventTimeline` resumes from `since_seq`
+  (≤3 reconnects) and stops silently on `done`.
+  `tests/test_sse_hold.py` (4 tests).
+- B1 export privacy: `GET /workflows/{id}/evidence?view=shared` omits
+  non-chained user-controlled fields (name/intent/plan/inputs/output/error,
+  listed in `redactions`) while event payloads stay byte-identical, so
+  offline `verify_bundle` still returns VALID.
+  `tests/test_evidence_shared_view.py` (4 tests).
+- wf41 disposition: orphaned RUNNING/UNKNOWN_OUTCOME in an expired guest org
+  (crash-mid-effect, effect ABSENT in store, no API principal can resume by
+  tenant-isolation design) — left in place, documented in
+  `.agents/reviews/wf41-disposition.md`.
+- API suite: 786 passed / 2 honest skips (778 RC8 + 8 new), 0 failures.
+- No schema migration (create_all unchanged; no new columns).
+
 ## RC8 — Red-team replay remainders closed (0.2.0-rc.8)
 
 - Commit: `06651ab`, 2026-11-06 (joint API+web bump; tag `v0.2.0-rc.8` after CI + prod verification).

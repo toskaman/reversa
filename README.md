@@ -66,7 +66,7 @@ then run the 30-second demo above.
 ## Tests & benchmarks
 
 ```bash
-python -m pytest reversa/apps/api/tests/ -q        # 778 passed, 2 honest skips (RC8 v0.2.0-rc.8; RC7 fresh-clone verified)
+python -m pytest reversa/apps/api/tests/ -q        # 786 passed, 2 honest skips (RC9 v0.2.0-rc.9; RC7 fresh-clone verified)
 python reversa/tests/e2e/smoke_browser.py --token <tok>   # 10/10 in real Chromium (agentic + guest chaos)
 python reversa/tests/performance/bench.py --base <url> --token <tok>
 ```
