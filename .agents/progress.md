@@ -91,3 +91,8 @@
   VALID, SSE done 0.6 s. Tag `v0.2.0-rc.10`.
 - Reste (humain requis): soumission LabLab — voir
   `docs/jury/SUBMISSION-ACTION-REQUIRED.md`. VM allumée.
+
+## 2026-11-06 � V11 (docs+verification, pas de RC11)
+
+- HEAD 999921a, CI 42160877427 verte. R12: 1 ligne token (jury/org1); rotation post-soumission. Board 57 soumissions, ARC seul rival C2.
+- NOUVEAU: beachhead+ROI, value prop, jury sim, rapport 20. Business 7->8. Video V2 reste l'asset (V3 NO-GO).
