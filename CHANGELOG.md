@@ -10,6 +10,24 @@ Skips in all releases are the same two honest conditional skips
 (Vultr live-provider eval, GitHub live cycle); no Vultr/GitHub secrets
 were present in the environment when the counts were observed.
 
+## RC8 — Red-team replay remainders closed (0.2.0-rc.8)
+
+- Commit: `06651ab`, 2026-11-06 (joint API+web bump; tag `v0.2.0-rc.8` after CI + prod verification).
+- Post-RC7 replay of `.agents/reviews/redteam-v5.md` (11 findings re-read
+  against code+tests): 03 already FIXED in RC7; RC8 fixes 01 (mint tier
+  20/60 on owner guest-session + token mint), 04 (durable approver =
+  authenticated `token:`/`guest:` actor, client label kept as
+  `decided_by_label`), 05b (`MAX_PLAN_STEPS = 32`), 07 (public-mint
+  windows ≤10k, SSE tickets ≤1k, oldest-first eviction), 10 (bool
+  rejected for int inputs and `depends_on`). 06/11 accepted risks
+  (documented), 02/05/08 partial with documented limits, 09 open by
+  design (protocol_v5 stays unwired). Report:
+  `.agents/reviews/redteam-v6-replay.md`.
+- API suite: 778 passed / 2 honest skips on pristine `git archive`
+  extract of `06651ab` (workspace `.venv`, 105 s) — 771 RC7 + 7 new
+  `test_redteam_v6_fixes.py`.
+- No schema migration (create_all unchanged; no new columns).
+
 ## RC7 — V5 redteam fixes + A/B prompt decision (0.2.0-rc.7)
 
 - Commit: `5dac22a`, 2026-11-06 (joint API+web bump; tag `v0.2.0-rc.7` after CI + prod verification).

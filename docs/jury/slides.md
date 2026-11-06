@@ -1,6 +1,6 @@
 # REVERSA — slide deck (10 slides)
 
-Render with any markdown slides tool. Images: `.agents/smoke/*.png`.
+Render with any markdown slides tool. Images: `gallery/*.png` (source for `build_slides.py` → `slides.pdf`).
 
 1. **Title** — REVERSA. AI that doesn't just act. It makes things right.
 2. **Problem** — AI ops fail halfway; half-created accounts everywhere.

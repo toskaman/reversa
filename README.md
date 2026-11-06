@@ -96,7 +96,9 @@ immutability alone. Demo systems are labeled as such.
 
 - [Jury dossier](docs/jury/) — overview, compliance, architecture, proofs,
   AI, security, benchmarks, business case, demo script, verification.
-- [Demo video build](docs/jury/build_video.py) — 85 s narrated V2 from real captures (V1 66 s kept as fallback).
+- [Demo videos](docs/jury/) — `demo-v2.mp4`, 85 s narrated from real captures
+  (6 scene clips + SRT; assembled per `v2-clips/shot-log.md`); V1 66 s
+  (`demo.mp4`, built by `build_video.py`) kept as fallback.
 - [LabLab texts](docs/jury/lablab-submission.md) · [Slides](docs/jury/slides.md)
 
 MIT — built originally for this hackathon.
