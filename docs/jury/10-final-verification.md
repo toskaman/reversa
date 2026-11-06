@@ -38,6 +38,10 @@ Verified 2026-11-06 (RC7 gate; all green):
   offline CLI VALID; pytest 771 passed / 2 skipped (matches RC7 record);
   web `npm install` + `next build` PASS, served homepage 200
   (first probe needed a longer boot wait). Temp clone removed after.
+- [x] Submission video decision (2026-11-06): keep `demo-v2.mp4` (85 s,
+  audited SHIP-READY in `media-checklist.md`, claims re-verified TRUE);
+  V3 stays a storyboard — no unfinished video blocks the submission.
+  Lablab texts synced to RC7 (771 tests, 65,553 live tokens) at 1979 chars.
 - [ ] LabLab submission fields + deadline re-checked on the dashboard.
 - [ ] Submission completed on LabLab (requires the human's account).
 

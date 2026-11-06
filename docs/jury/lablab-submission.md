@@ -45,9 +45,9 @@ AI plans are accepted only after strict validation, malformed drafts are
 rejected (422) and never executed, and the deterministic baseline remains
 the default with explicit fallback. Ambiguous intents get structured
 clarification, off-scope ones an explicit refusal — never a silent
-wrong template. Evals ship in-repo: 100 offline cases plus a 2×10 live
-Vultr campaign (31,975 tokens). Release 0.2.0-rc.6 ships a 689-test API
-suite (2 honest skips), 20/20 chaos-matrix scenarios, and per-run
+wrong template. Evals ship in-repo: 100 offline cases plus live Vultr
+campaigns (2×10 + 12-case A/B, 65,553 tokens). Release 0.2.0-rc.7 ships
+a 771-test API suite (2 honest skips), 20/20 chaos scenarios, per-run
 recovery manifests — every claim re-runnable from the repo.
 
 Reversible where possible. Accountable everywhere.
