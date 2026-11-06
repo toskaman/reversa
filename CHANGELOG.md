@@ -12,8 +12,8 @@ were present in the environment when the counts were observed.
 
 ## RC10 — SSE slot-leak fix + shared-view approvals omission (0.2.0-rc.10)
 
-- Commit: TBD (joint API+web bump; tag `v0.2.0-rc.10` after CI + prod
-  verification), 2026-11-06. V8 audit work + V9 engineering.
+- Commit: `da73559`, 2026-11-06 (joint API+web bump; tag `v0.2.0-rc.10`
+  after CI + prod verification). V8 audit work + V9 engineering.
 - SSE lifecycle FIX: idempotent `_StreamLease` owns each admission slot;
   release fires from `gen()`'s `finally` (normal path) and from a
   `weakref.finalize` on the response (abandoned before/during streaming).
