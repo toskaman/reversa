@@ -114,3 +114,67 @@ contended box with a different mix, so it is a signal, not a claim.
   files this agent never touched (`auth.py`, `guest_sessions.py`,
   `evidence.py` carry uncommitted sibling-agent changes); no source
   file was modified by this task. No secrets committed; nothing pushed.
+
+---
+
+# RC7 campaign — guest-org concurrency on NVMe (2026-11-06)
+
+Code: HEAD `be9bd6a` (`0.2.0-rc.7` + revoked-hashes compose fix).
+Server: same box (Ryzen 7 5700X, Windows), single uvicorn worker,
+loopback `127.0.0.1:6232`, fresh data dir per server start, SQLite
+everywhere. Client: real HTTP via threads
+(`D:\tmp\rc7_bench.py`, kept outside the repo with the raw JSON).
+No production contact; server stopped and data dirs + logs deleted
+after the runs (the local seed token lived only in the deleted log).
+
+Method per flow: owner-authed guest mint (2/2 quotas) -> deterministic
+intent -> approve -> barrier-aligned execute -> poll to terminal ->
+evidence export -> SSE replay-to-done on a pre-minted ticket.
+A `/healthz` sampler runs every 0.5 s throughout.
+
+Measurement bias, stated honestly: the `exec` timer covers
+`POST /execute` PLUS a 1 s-granularity poll loop that always sleeps
+1 s before its first poll, so every raw `exec` value carries a +1 s
+systematic bias. Adjusted figures below subtract exactly 1000 ms.
+SSE here is replay-on-finished-workflow (ticket minted pre-execute,
+stream read post-completion), NOT a live-held stream like §2;
+first-event/duration numbers are therefore not comparable to §3.
+
+## Results (measured, NVMe data dir)
+
+| N | exec raw p50 | exec adj. (~raw-1s) | exec raw p95 | mint p50 | states | events/wf | errors |
+|---|---|---|---|---|---|---|---|
+| 1 | 1183 ms | ~183 ms | 1183 ms | 215 ms | 1/1 COMPLETED | 59 | 0 |
+| 5 | 1466 ms | ~466 ms | 1802 ms | 611 ms | 5/5 COMPLETED | 59 | 0 |
+| 10 | 2169 ms | ~1169 ms | 2581 ms | 829 ms | 10/10 COMPLETED | 59 | 0 |
+
+- SSE replay: first-event p50 ~3-4 ms, duration p50 ~515 ms
+  (poll-interval bound), 16/16 streams reached `done`, 0 errors.
+- `/healthz` during load: p50 ~2.6 ms; one 600-900 ms sample per
+  run (contention hiccup), 0 errors.
+- Evidence: flow0 bundle of N=5 re-verified with the offline CLI:
+  `VALID: offline chain valid (59 events recomputed)`, exit 0.
+- Zero 5xx, zero `database is locked`, zero 429 on the owner-authed
+  path, zero SSE failures. N=1 sequential (~183 ms adjusted)
+  matches the V2 §3 sequential baseline (192 ms): no code
+  regression between V2-cycle4 and RC7 on this shape.
+
+## HDD outlier (environmental, documented, not a code signal)
+
+The first N=5 run used a data dir on D: (WDC WD10EARX 5400 rpm
+HDD, confirmed via Get-Disk): 5/5 COMPLETED, 59 events, 0 errors,
+but exec raw p50 13.2 s and mint p50 836 ms. Same code, same
+method, ~9x slower than NVMe — SQLite synchronous commits on a
+spinning disk. Kept in the record so nobody misreads it as a
+regression; the NVMe runs above are the reference.
+
+## Not claimed
+
+- Localhost SQLite only (N=1/5/10, one run each); nothing here
+  predicts Postgres staging/prod latency.
+- No N=25/50 threadpool-saturation run, no sustained soak; the
+  sync-SSE + single-writer warnings from §7 and `load-protocol.md`
+  §1 still stand.
+- A follow-up N=1 via the PUBLIC mint path returned HTTP 429:
+  the 5/hour/IP public-mint bucket works as designed (that run
+  is excluded from the table, not retried against policy).
