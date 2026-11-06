@@ -32,6 +32,12 @@ Verified 2026-11-06 (RC7 gate; all green):
 - [x] Concurrency RC7 on isolated loopback (2026-11-06): N=1/5/10, all
   COMPLETED, 59 events each, CLI VALID, 0 errors. See
   `docs/benchmarks/concurrency-results.md`.
+- [x] Fresh-clone test 2026-11-06 (clone of `d6f2ac3` from GitHub, no key):
+  venv install OK; API boots with demo token in log (README-accurate);
+  public mint → intent → approve → execute → COMPLETED, 59 events,
+  offline CLI VALID; pytest 771 passed / 2 skipped (matches RC7 record);
+  web `npm install` + `next build` PASS, served homepage 200
+  (first probe needed a longer boot wait). Temp clone removed after.
 - [ ] LabLab submission fields + deadline re-checked on the dashboard.
 - [ ] Submission completed on LabLab (requires the human's account).
 
