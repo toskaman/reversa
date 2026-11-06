@@ -75,7 +75,7 @@ export default function DecisionInspector({ workflowId }: {
             <p className="muted">No approval events — auto-allowed plan
               or approval never requested.</p>
           )}
-          <div className="timeline">
+          <div className="timeline" tabIndex={0} role="region" aria-label="Event list">
             {approvals.map((e) => (
               <div key={e.seq}><code>#{e.seq}</code> <code>{e.type}</code>{" "}
                 <span className="muted">{e.actor}</span>{" "}

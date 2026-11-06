@@ -112,7 +112,7 @@ def main() -> int:
 
         # Demo Lab: one-click chaos -> compensated workflow.
         page.goto(f"{args.web}/demo-lab")
-        page.get_by_role("button", name="INJECT FAILURE + RUN").click()
+        page.get_by_role("button", name="Simulate a failure").click()
         chaos_id = ""
         try:
             page.wait_for_selector("text=Chaos scenario finished", timeout=180000)

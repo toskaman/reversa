@@ -8,20 +8,18 @@ interface Props {
 // Cycle 2 §3: off-scope intent → explicit refusal code, NO workflow.
 export default function CommandRefusal({ code, reason, provider, onDismiss }: Props) {
   return (
-    <div className="card" role="alert">
-      <h2>
-        <span className="badge b-red">REFUSED</span>{" "}
-        <code>{code}</code>
-      </h2>
-      <p>{reason}</p>
-      <p className="muted">
-        No workflow was created{provider ? ` (provider: ${provider})` : ""}.
-        REVERSA plans onboarding, offboarding and escalation requests —
-        please rephrase your intent within one of these domains.
-      </p>
-      <button className="ghost" onClick={onDismiss}>
-        Dismiss
-      </button>
+    <div className="callout bad" role="alert">
+      <span className="callout-glyph" aria-hidden="true">✕</span>
+      <div className="callout-body">
+        <p><strong>Request refused</strong> <code>{code}</code></p>
+        <p>{reason}</p>
+        <p className="muted small">
+          No workflow was created{provider ? ` (planner: ${provider})` : ""}.
+          REVERSA plans onboarding, offboarding and escalation requests.
+          Rephrase your request within one of these.
+        </p>
+        <div className="actions"><button className="ghost" onClick={onDismiss}>Dismiss</button></div>
+      </div>
     </div>
   );
 }

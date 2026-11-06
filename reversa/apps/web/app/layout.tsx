@@ -1,11 +1,13 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import "./globals.css";
 import Nav from "../components/Nav";
 
 export const metadata: Metadata = {
-  title: "REVERSA — Self-Healing AI Operations",
-  description: "AI that doesn't just act. It makes things right.",
+  title: "REVERSA — AI operations, with recovery built in",
+  description: "Execute and verify multi-system workflows. When something fails, REVERSA safely reverses what it can and records what happened.",
 };
+
+export const viewport: Viewport = { themeColor: "#0b0c0e", width: "device-width", initialScale: 1 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (

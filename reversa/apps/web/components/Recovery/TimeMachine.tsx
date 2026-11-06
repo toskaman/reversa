@@ -12,7 +12,7 @@ function PhaseColumn({ title, events, emptyHint }: {
   return (
     <div className="card">
       <h2>{title} ({events.length})</h2>
-      <div className="timeline">
+      <div className="timeline" tabIndex={0} role="region" aria-label="Event list">
         {events.map((e) => (
           <div key={e.seq}>
             <code>#{e.seq}</code> <code>{e.type}</code>{" "}

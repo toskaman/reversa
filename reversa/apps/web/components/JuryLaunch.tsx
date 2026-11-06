@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useState } from "react";
 import { ApiError, api, apiAs, getToken } from "../lib/api";
+import StatusBadge from "./StatusBadge";
 
 type Phase =
   | "idle"
@@ -14,11 +15,11 @@ type Phase =
   | "done";
 
 const PHASE_LABEL: Record<Exclude<Phase, "idle" | "done">, string> = {
-  checking: "Public mint unavailable — checking demo-owner connection…",
-  minting: "Minting guest session…",
-  creating: "Creating demo workflow (as guest)…",
-  approving: "Approving plan (as guest)…",
-  executing: "Executing demo workflow (as guest)…",
+  checking: "Public demo sessions unavailable, checking the demo-owner connection…",
+  minting: "Starting an isolated demo session…",
+  creating: "Planning the Acme onboarding…",
+  approving: "Approving the plan…",
+  executing: "Executing and verifying each step across the demo systems…",
 };
 
 // Public (unauthenticated) guest-mint candidates, tried in order with NO
@@ -72,6 +73,7 @@ export default function JuryLaunch() {
   const [wfId, setWfId] = useState<number | null>(null);
   const [guest, setGuest] = useState<GuestMint | null>(null);
   const [mintedVia, setMintedVia] = useState<"public" | "owner" | null>(null);
+  const [finalState, setFinalState] = useState("");
 
   const busy = phase !== "idle" && phase !== "done";
 
@@ -81,6 +83,7 @@ export default function JuryLaunch() {
     setWfId(null);
     setGuest(null);
     setMintedVia(null);
+    setFinalState("");
 
     // 1. Zero-token path: try the public guest-mint endpoint(s) with no
     // Authorization header at all.
@@ -212,9 +215,9 @@ export default function JuryLaunch() {
 
     setPhase("executing");
     try {
-      await apiAs(`/api/v1/workflows/${id}/execute`, minted.credential, {
-        method: "POST",
-      });
+      const ex = await apiAs<{ workflow?: { state?: string } }>(
+        `/api/v1/workflows/${id}/execute`, minted.credential, { method: "POST" });
+      setFinalState(ex?.workflow?.state || "");
     } catch (e) {
       setFailedPhase("executing");
       setError(`Workflow #${id} created, execution failed: ${errText(e)}`);
@@ -229,44 +232,111 @@ export default function JuryLaunch() {
     window.dispatchEvent(new Event("reversa:guest-ready"));
   }
 
+  const STEPS: { key: Phase; label: string }[] = [
+    { key: "minting", label: "Start an isolated demo session" },
+    { key: "creating", label: "Plan the Acme onboarding" },
+    { key: "approving", label: "Approve the plan" },
+    { key: "executing", label: "Execute and verify each step" },
+  ];
+  const order: Phase[] = ["checking", "minting", "creating", "approving", "executing", "done"];
+  const at = order.indexOf(phase === "idle" ? (failedPhase ?? "idle") : phase);
+  function stepState(k: Phase): string | undefined {
+    const ki = order.indexOf(k);
+    if (phase === "done") return "done";
+    if (phase === "idle") {
+      if (!failedPhase) return undefined;
+      const fk = failedPhase === "checking" ? "minting" : failedPhase;
+      if (k === fk) return "failed";
+      return ki < order.indexOf(fk) ? "done" : undefined;
+    }
+    if (ki < at) return "done";
+    if (ki === at || (k === "minting" && phase === "checking")) return "current";
+    return undefined;
+  }
+  const showSteps = busy || phase === "done" || !!failedPhase;
+
   return (
-    <div className="card">
-      <h2>Jury Mode — interactive demo</h2>
+    <section className="card" aria-labelledby="jury-title">
+      <p className="eyebrow">Interactive demo · about 15 seconds</p>
+      <h2 id="jury-title">See REVERSA in action</h2>
       <p className="muted">
-        One click: mints a short-lived guest session (60 min, quota-bound)
-        with zero preconfigured token when the API exposes public guest
-        minting, and runs the Acme onboarding in the demo tenant as that
-        guest. Without a public endpoint it falls back to your demo-owner
-        token (Settings). Your owner token is never replaced.
+        Launch a guided demonstration in an isolated example environment.
+        Nothing to configure, and no real systems are touched.
       </p>
+      {showSteps && (
+        <ol className="flow vertical" aria-label="Demo progress">
+          {STEPS.map((st) => {
+            const ds = stepState(st.key);
+            return (
+              <li key={st.key} data-state={ds}>
+                <strong>{st.label}</strong>
+                {ds === "current" && <span className="sr-only"> (in progress)</span>}
+                {ds === "done" && <span className="sr-only"> (done)</span>}
+                {ds === "failed" && <span className="sr-only"> (failed)</span>}
+              </li>
+            );
+          })}
+        </ol>
+      )}
+      <div aria-live="polite" role="status">
+        {busy && <p className="muted small">{PHASE_LABEL[phase as Exclude<Phase, "idle" | "done">]}</p>}
+      </div>
       {error && (
-        <div className="err">
+        <div className="err" role="alert">
+          <strong>The demo could not finish.</strong>{" "}
           {failedPhase && failedPhase !== "idle" ? `${failedPhase}: ` : ""}{error}
         </div>
       )}
       {phase === "done" && wfId !== null && (
-        <div className="ok">
-          Demo ran as guest session{" "}
-          <code>{guest?.session_id}</code>
-          {guest?.org_slug ? <> in <code>{guest.org_slug}</code></> : null}{" "}
-          (expires {guest?.expires_at}, minted {mintedVia === "public"
-            ? "via the public endpoint — no token needed"
-            : "via your demo-owner token"}).{" "}
-          <Link href={`/workflows/${wfId}`}>Open result #{wfId}</Link>
+        <div className="callout good" role="status">
+          <span className="callout-glyph" aria-hidden="true">✓</span>
+          <div className="callout-body">
+            {finalState === "COMPLETED" ? (
+              <p><strong>Onboarding workflow #{wfId} completed.</strong> Every step was
+                executed and verified across the demo systems.</p>
+            ) : (
+              <p><strong>Onboarding workflow #{wfId} executed.</strong> Current state:{" "}
+                <StatusBadge state={finalState || "UNKNOWN"} /></p>
+            )}
+            <div className="actions">
+              <Link className="btn" href={`/workflows/${wfId}`}>View the result</Link>
+              <Link className="btn ghost" href="/demo-lab">Next: simulate a failure</Link>
+            </div>
+          </div>
         </div>
       )}
-      {busy ? (
-        <p aria-live="polite">
-          {PHASE_LABEL[phase as Exclude<Phase, "idle" | "done">]}
+      {!busy && phase !== "done" && (
+        <div className="actions" style={{ marginTop: 8 }}>
+          <button className="lg" onClick={launch}>{failedPhase ? "Try again" : "Start demo"}</button>
+          {wfId !== null && (
+            <Link className="btn ghost" href={`/workflows/${wfId}`}>Open partial result #{wfId}</Link>
+          )}
+        </div>
+      )}
+      {phase === "done" && (
+        <p style={{ marginTop: 12 }}>
+          <button className="ghost" onClick={launch}>Run it again</button>
         </p>
-      ) : (
-        <button onClick={launch}>Launch Interactive Demo</button>
       )}
-      {wfId !== null && phase !== "done" && (
-        <Link className="btn ghost" href={`/workflows/${wfId}`}>
-          Open partial result #{wfId}
-        </Link>
-      )}
-    </div>
+      <details className="disclosure" style={{ marginTop: 16, marginBottom: 0 }}>
+        <summary>Session details <span className="muted">· for technical reviewers</span></summary>
+        <div className="disclosure-body small">
+          <p className="muted">
+            The demo mints a short-lived guest session (60 min, quota-bound) through the
+            public endpoint when available, otherwise through your demo-owner token from
+            Settings. It runs in the demo tenant only; your owner token is never replaced.
+          </p>
+          {guest ? (
+            <dl className="kv">
+              <dt>Session</dt><dd><code>{guest.session_id}</code></dd>
+              {guest.org_slug && <><dt>Demo org</dt><dd><code>{guest.org_slug}</code></dd></>}
+              <dt>Expires</dt><dd>{guest.expires_at}</dd>
+              <dt>Quotas</dt><dd>{guest.max_workflows} workflows · {guest.max_executes} executions</dd>
+              <dt>Minted via</dt><dd>{mintedVia === "public" ? "public endpoint (no token needed)" : "your demo-owner token"}</dd>
+            </dl>
+          ) : <p className="muted">No session started yet.</p>}
+        </div>
+      </details>
+    </section>
   );
 }

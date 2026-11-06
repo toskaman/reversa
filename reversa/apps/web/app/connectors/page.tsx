@@ -32,22 +32,25 @@ export default function Connectors() {
 
   return (
     <div>
-      <h1>Connector Hub</h1>
-      <p className="sub">Authorized capabilities only. Demo connectors are labeled.</p>
-      {error && <div className="err">{error}</div>}
+      <h1>Connectors</h1>
+      <p className="sub">The systems REVERSA can act on, and the exact capabilities it is allowed to use.
+        Anything not listed here cannot be planned. Demo connectors are isolated stores, labeled as such.</p>
+      {error && <div className="err" role="alert">{error}</div>}
       <div className="grid">
         {connectors.map((c) => (
           <div className="card" key={c.connector_id}>
             <h2><code>{c.connector_id}</code></h2>
-            <p className="muted">store: {c.store} · resources: {c.resources} ·
-              {c.healthy ? " healthy" : " UNHEALTHY"}</p>
+            <p className="small">
+              <span className={`badge ${c.healthy ? "tone-ok" : "tone-bad"}`}>
+                <span className="badge-glyph" aria-hidden="true">{c.healthy ? "✓" : "✕"}</span>{c.healthy ? "Healthy" : "Unhealthy"}</span>{" "}
+              <span className="muted">{c.resources} resources · store {c.store}</span></p>
             <button className="ghost" onClick={() => inspect(c.connector_id)}>
               Inspect</button>
           </div>
         ))}
       </div>
-      <h2>Capabilities ({caps.length})</h2>
-      <div className="table-wrap">
+      <h2>Allowed capabilities ({caps.length})</h2>
+      <div className="card flush"><div className="table-wrap">
       <table><thead><tr><th>Action</th><th>Connector</th><th>Compensation</th>
         <th>Policy</th><th>Risk</th></tr></thead>
         <tbody>{caps.map((c) => (
@@ -55,11 +58,11 @@ export default function Connectors() {
             <td>{c.connector_id}</td><td>{c.compensation_capability}</td>
             <td>{c.approval_policy}</td><td>{c.risk_level}</td></tr>
         ))}</tbody></table>
-      </div>
+      </div></div>
       {detail && (
         <div className="card"><h2>{detail.id}</h2>
           <pre>{JSON.stringify(detail.body, null, 2).slice(0, 4000)}</pre>
-          <button className="ghost" onClick={() => setDetail(null)}>Close</button>
+          <button className="ghost" onClick={() => setDetail(null)}>Close details</button>
         </div>
       )}
     </div>

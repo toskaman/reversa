@@ -1,39 +1,74 @@
 "use client";
 
 import type { Action } from "../lib/types";
+import { compensationLabel, humanAction, humanConnector, statusOf } from "../lib/status";
 
-const COLORS: Record<string, string> = {
-  PENDING: "#64748b", CLAIMED: "#93c5fd", EXECUTING: "#60a5fa",
-  SUCCEEDED: "#86efac", VERIFYING: "#fcd34d", VERIFIED: "#22c55e",
-  FAILED: "#ef4444", RETRY_SCHEDULED: "#f59e0b", COMPENSATION_PENDING: "#f59e0b",
-  COMPENSATING: "#f59e0b", COMPENSATED: "#a78bfa", COMPENSATION_FAILED: "#ef4444",
-  UNKNOWN_OUTCOME: "#f59e0b", SKIPPED: "#475569",
-};
+const ACTIVE_STATES = new Set(["CLAIMED", "EXECUTING", "SUCCEEDED", "VERIFYING", "COMPENSATING", "RETRY_SCHEDULED"]);
 
+/** Group actions into dependency stages: a stage only starts once every step it depends on is done.
+ *  Steps in the same stage have no dependency on each other and may run in parallel. */
+export function stagesOf(actions: Action[]): Action[][] {
+  const bySeq = new Map(actions.map((a) => [a.seq, a]));
+  const level = new Map<number, number>();
+  const visiting = new Set<number>();
+  function lv(a: Action): number {
+    const known = level.get(a.seq);
+    if (known !== undefined) return known;
+    if (visiting.has(a.seq)) return 0; // defensive: cycles are rejected server-side
+    visiting.add(a.seq);
+    const deps = a.depends_on.map((d) => bySeq.get(d)).filter((x): x is Action => !!x);
+    const v = deps.length ? Math.max(...deps.map(lv)) + 1 : 0;
+    visiting.delete(a.seq);
+    level.set(a.seq, v);
+    return v;
+  }
+  const out: Action[][] = [];
+  for (const a of [...actions].sort((x, y) => x.seq - y.seq)) {
+    const v = lv(a);
+    (out[v] ||= []).push(a);
+  }
+  return out.filter(Boolean);
+}
+
+/** Readable execution sequence. An ordered list, so it is its own screen-reader equivalent. */
 export default function WorkflowGraph({ actions }: { actions: Action[] }) {
-  const W = 640, rowH = 46;
-  const H = Math.max(actions.length * rowH + 20, 80);
-  const y = (seq: number) => 10 + (seq - 1) * rowH + 18;
+  if (actions.length === 0) return <p className="muted">No steps yet.</p>;
+  const stages = stagesOf(actions);
   return (
-    <svg width="100%" height={H} viewBox={`0 0 ${W} ${H}`} role="img"
-      aria-label="Workflow graph">
-      {actions.map((a) =>
-        a.depends_on.map((d) => (
-          <line key={`${a.seq}-${d}`} x1={150} y1={y(d)} x2={150} y2={y(a.seq)}
-            stroke="#334155" strokeWidth={2} />
-        ))
-      )}
-      {actions.map((a) => (
-        <g key={a.seq}>
-          <circle cx={150} cy={y(a.seq)} r={9} fill={COLORS[a.state] || "#64748b"} />
-          <text x={170} y={y(a.seq) + 4} fill="#e6ebf2" fontSize={13}>
-            {a.seq}. {a.action_type}
-          </text>
-          <text x={470} y={y(a.seq) + 4} fill="#9aa7bd" fontSize={12}>
-            {a.state}{a.attempt > 1 ? ` (try ${a.attempt})` : ""}
-          </text>
-        </g>
+    <ol className="seq" aria-label={`Execution sequence, ${actions.length} steps in ${stages.length} stages`}>
+      {stages.map((stage, i) => (
+        <li className="stage" key={i}>
+          <div className="stage-rail" aria-hidden="true"><span className="stage-num">{i + 1}</span></div>
+          <div>
+            {stage.length > 1 && <p className="stage-label">{stage.length} independent steps, may run in parallel</p>}
+            <ul className="stage-body">
+              {stage.map((a) => {
+                const st = statusOf(a.state);
+                const active = ACTIVE_STATES.has(a.state);
+                const tone = active ? "info" : st.tone;
+                return (
+                  <li className="node" key={a.seq} data-tone={tone} aria-current={active ? "step" : undefined}>
+                    <div className="node-top">
+                      <span className="node-title">
+                        <span className="muted">{a.seq}.</span> {humanAction(a.action_type)}
+                      </span>
+                      <span className={`badge tone-${st.tone}`} title={a.state}>
+                        <span className="badge-glyph" aria-hidden="true">{st.glyph}</span>{st.label}
+                      </span>
+                    </div>
+                    <div className="node-meta">
+                      {humanConnector(a.connector_id)} · {compensationLabel(a.compensation_capability)}
+                      {a.attempt > 1 ? ` · attempt ${a.attempt}/${a.max_attempts}` : ""}
+                      {a.depends_on.length > 0 ? ` · after ${a.depends_on.map((d) => `#${d}`).join(", ")}` : ""}
+                    </div>
+                    {a.error && <div className="node-err">{a.error.slice(0, 160)}</div>}
+                  </li>
+                );
+              })}
+            </ul>
+          </div>
+        </li>
       ))}
-    </svg>
+    </ol>
   );
 }
