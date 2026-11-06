@@ -8,9 +8,12 @@ test suite (`pytest reversa/apps/api/tests`, `smoke_browser.py`).
    profile). Query before, during, after.
 2. **Real failures:** Demo Lab injects HTTP 500/429, timeouts, malformed
    responses, latency, crashes — consumed as one-shot rules, demo tenant only.
-3. **Real compensation:** billing-500 run ends COMPENSATED: 7 actions undone
-   in reverse order (verified absent afterwards — workspace hard-deleted,
-   users/org/queue archived), 2 dependents SKIPPED. Order asserted in tests.
+3. **Real compensation:** billing-500 run ends COMPENSATED: 7 compensated
+   in reverse order — 6 true undos (verified absent afterwards —
+   workspace hard-deleted, users/org/queue archived) + seq-1 read-only
+   noop (`crm.validate_customer`, note "noop (read-only)" in
+   `v2-clips/s6-passport-chaos.html`), 2 dependents SKIPPED. Order
+   asserted in tests.
 4. **Real reconciliation:** timeout run passes through UNKNOWN_OUTCOME,
    confirms absence, retries idempotently (no duplicates), ends COMPLETED.
 5. **Real races:** 5 threads claim one action — exactly one wins (test).

@@ -10,18 +10,37 @@ Skips in all releases are the same two honest conditional skips
 (Vultr live-provider eval, GitHub live cycle); no Vultr/GitHub secrets
 were present in the environment when the counts were observed.
 
+## Unreleased (V8 audit, post-RC9 main)
+
+- SSE lifecycle: `tests/test_sse_hold.py` +2 tests (consumed-stream slot
+  release passes; never-started-generator slot leak pinned as strict
+  `xfail` — slot opens in the route body, release lives only in `gen()`'s
+  `finally`, and Starlette 1.10.0 never closes the sync iterator).
+  Suite: 787 passed / 1 xfailed / 2 honest skips.
+- Wording corrections (no behavior change): SSE bounds are best-effort
+  (known disconnect-before-first-yield leak, RC10 fix planned);
+  `?view=shared` is internal/do-not-post — events stay byte-identical so
+  actor/org/error strings still escape (RC10: commitment-based format).
+- New jury docs: `docs/jury/START-HERE.md`, `docs/jury/final-pitch.md`,
+  `docs/jury/17-gauntlet-delta-rc9.md` (all overclaims fixed per V8 audit).
+
 ## RC9 — SSE bounds + shareable evidence view (0.2.0-rc.9)
 
-- V7 Track B hardening, 2026-11-06 (joint API+web bump).
+- Commit: `3ea39ee`, 2026-11-06 (joint API+web bump; tag `v0.2.0-rc.9`
+  after CI + prod verification).
 - B2 SSE: idle hold 120 s → 30 s, heartbeat comments every ~2 s so dead
-  clients release the worker thread, max 32 concurrent streams (429 +
+  clients release the worker thread promptly (best-effort: a stream
+  dropped before its first yield still leaks its admission slot — V8
+  finding, RC10 fix planned), max 32 concurrent streams (429 +
   Retry-After past the cap); `EventTimeline` resumes from `since_seq`
   (≤3 reconnects) and stops silently on `done`.
   `tests/test_sse_hold.py` (4 tests).
 - B1 export privacy: `GET /workflows/{id}/evidence?view=shared` omits
   non-chained user-controlled fields (name/intent/plan/inputs/output/error,
   listed in `redactions`) while event payloads stay byte-identical, so
-  offline `verify_bundle` still returns VALID.
+  offline `verify_bundle` still returns VALID. Internal/do-not-post:
+  actor/org/error strings in the identical events still escape (V8
+  finding, RC10 commitment-based format planned).
   `tests/test_evidence_shared_view.py` (4 tests).
 - wf41 disposition: orphaned RUNNING/UNKNOWN_OUTCOME in an expired guest org
   (crash-mid-effect, effect ABSENT in store, no API principal can resume by

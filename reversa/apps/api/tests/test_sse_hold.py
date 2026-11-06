@@ -5,10 +5,12 @@ release the thread), and concurrency-capped.
 Gates: F1 blind-hold release (heartbeat bounds it, live staging check);
 F2 C-mixed saturation campaign (ops doc, not unit scope).
 """
+import gc
 import time
 
 import pytest
 from fastapi import HTTPException
+from starlette.requests import Request
 
 from reversa_api.routes import workflows as wf_routes
 
@@ -78,3 +80,49 @@ def test_terminal_replay_still_immediate(client, demo_auth):
     assert r.status_code == 200
     assert "event: done" in r.text
     assert time.monotonic() - start < 10
+
+
+def test_consumed_stream_releases_slot(client, demo_auth):
+    """V8: a fully consumed stream returns the admission counter to 0."""
+    from .conftest import make_ready
+    wf_routes.reset_sse_stream_state()
+    made = make_ready(client, demo_auth)
+    wf_id = made["workflow"]["id"]
+    r = client.post(f"/api/v1/workflows/{wf_id}/execute",
+                    headers=demo_auth["headers"])
+    assert r.json()["workflow"]["state"] == "COMPLETED"
+    r = client.get(f"/api/v1/workflows/{wf_id}/events/stream",
+                   headers=demo_auth["headers"])
+    assert r.status_code == 200
+    assert "event: done" in r.text
+    assert wf_routes._SSE_OPEN_STREAMS == 0
+
+
+@pytest.mark.xfail(
+    reason="V8: slot opened in route body (workflows.py:624) is released "
+    "only inside gen()'s finally (:667-668); close() on a never-started "
+    "generator is a CPython no-op, and Starlette 1.10.0 never closes the "
+    "sync iterator — the slot leaks. RC10 fix: deterministic close.",
+    strict=True,
+)
+def test_unstarted_stream_response_releases_slot(client, demo_auth):
+    """V8: dropping a stream response before first yield must not leak.
+
+    Calls the real route, drops the StreamingResponse without iterating
+    (response-start failure / middleware short-circuit shape), forces GC,
+    and requires the admission counter back at 0.
+    """
+    wf_routes.reset_sse_stream_state()
+    try:
+        wf_id = _nonterminal_wf(client, demo_auth)
+        authz = demo_auth["headers"]["Authorization"]
+        scope = {"type": "http",
+                 "headers": [(b"authorization", authz.encode("latin-1"))]}
+        resp = wf_routes.stream_events(wf_id, Request(scope))
+        assert resp.status_code == 200
+        assert wf_routes._SSE_OPEN_STREAMS == 1
+        del resp
+        gc.collect()
+        assert wf_routes._SSE_OPEN_STREAMS == 0
+    finally:
+        wf_routes.reset_sse_stream_state()

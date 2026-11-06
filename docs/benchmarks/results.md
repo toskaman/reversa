@@ -20,7 +20,7 @@ against production, sequential runs, asserts success + valid chains).
 
 - Plan (intent→validated plan, deterministic): P50 49 ms.
 - Evidence export (JSON, ~60 events): P50 36 ms.
-- Success rate: 100%. Recovery rate (chaos→COMPENSATED): 100%.
+- Success rate: 100% (n=10 happy runs). Recovery rate (chaos→COMPENSATED): 100% (n=5 chaos runs).
 - Evidence chains valid: 15/15 (API verdict; CLI re-verified on samples).
 
 ## What is NOT claimed

@@ -107,12 +107,18 @@ Total estimé : 85,2 + 8 + 6 + 5 + 1 ≈ 105 s de timeline pour ~97 s de VO à
 
 ## 3. Chiffres autorisés / interdits à l'écran
 
-Autorisés UNIQUEMENT : 505 ms / 1,78 s / 100 % / 59 events / 15 chaînes
-(`results.md`), 10 actions / 5 systèmes / 7 compensées, 363 tests + 2 skips
-(`CHANGELOG.md:17`, `10-final-verification.md:9`), 20/20 chaos
-(`CHANGELOG.md:71`), 100 cas eval + baseline 100 %/0 %
-(`test_ai_eval.py:479-486`), `provider: vultr-inference` + « accepted after
+Autorisés UNIQUEMENT (chiffres RC9 + V8, 2026-11-06) : 505 ms /
+1,78 s / 100 % (n=10 happy, n=5 chaos) / 59 events smoke + 81 chaos /
+15 chaînes (`results.md`, `15-final-verification-rc9.md:26-31`),
+10 actions / 5 systèmes démo / 6 undos + 1 read-only noop,
+787 tests + 1 xfailed (fuite SSE pinnée) + 2 skips (`CHANGELOG.md`),
+20/20 chaos, 100 cas eval + baseline 100 %/0 %
+(`test_ai_eval.py`), `provider: vultr-inference` + « accepted after
 2 attempts » (`05-ai-integration.md:23-26`).
+Interdit : « 7 compensées » sans le noop, `?view=shared` présenté comme
+anonymisé (interne/do-not-post, fuite actor/org/error prouvée — audit V8),
+« dead clients release the worker » sans « best-effort » (fuite slot
+pré-first-yield connue, fix RC10).
 Interdits : maquettes Recovery Race/Time Machine/Decision Inspector comme
 produit (labels d'onglets visibles = OK, narration muette dessus),
 « AI-powered » sans « engine-verified », footage GitHub (pas de run live
