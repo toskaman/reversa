@@ -10,6 +10,20 @@ Skips in all releases are the same two honest conditional skips
 (Vultr live-provider eval, GitHub live cycle); no Vultr/GitHub secrets
 were present in the environment when the counts were observed.
 
+
+## V12 — product redesign (frontend only)
+
+- New design system (graphite surfaces, one accent, status = glyph + label).
+- Navigation reduced to Overview, New workflow, Workflows, Recovery, Evidence + More.
+- Overview hero + guided demo ("Start demo"); Recovery cards from the Proof Engine
+  verdict; Evidence Passport with copyable basic/strict verify commands.
+- Evidence HTML report is downloaded instead of written into a same-origin window.
+- Demo Lab primary action renamed "Simulate a failure" (E2E smoke updated).
+- Value calculator separates assumptions, projections and measured benchmark.
+- Verified: tsc, next build, 792 API tests + 2 skips, E2E smoke 9/9, axe WCAG 2.2 AA
+  0 violations on 12 routes; deployed and re-verified on the public URL.
+- Gallery regenerated from the V12 build (`docs/jury/gallery/`, + overview.png).
+
 ## RC10 — SSE slot-leak fix + shared-view approvals omission (0.2.0-rc.10)
 
 - Commit: `da73559`, 2026-11-06 (joint API+web bump; tag `v0.2.0-rc.10`

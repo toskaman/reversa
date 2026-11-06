@@ -19,14 +19,25 @@ a verifiable Evidence Passport.
 1. **Command** — keep the Acme onboarding intent, generate the plan.
 2. **Shadow Preview** — effects, risks, approvals. Approve.
 3. **Execute** — 10 real actions across CRM, Identity, Support, Billing, Notify.
-4. **Demo Lab** — INJECT FAILURE: billing dies, REVERSA detects, blocks
+4. **Demo Lab** — Simulate a failure: billing dies, REVERSA detects, blocks
    dependents, compensates in reverse order, reports.
 5. **Evidence** — hash-chained timeline, JSON/HTML export, offline CLI verify.
 
-![Command Center](docs/jury/gallery/command-done.png)
+![Overview](docs/jury/gallery/overview.png)
+![New workflow](docs/jury/gallery/command-done.png)
 ![Live execution graph](docs/jury/gallery/workflow.png)
 ![Chaos recovery](docs/jury/gallery/chaos.png)
 ![Evidence Passport](docs/jury/gallery/evidence.png)
+
+## Interface (V12)
+
+The console was redesigned in V12 (frontend only, no API change): five primary
+sections (Overview, New workflow, Workflows, Recovery, Evidence) plus a More menu
+(Demo Lab, Time Machine, Execution Comparison, Connectors, Value calculator,
+Settings); human-readable statuses with a glyph and the canonical engine state on
+hover; a dependency-stage view of each workflow; recovery cases driven only by the
+Recovery Proof Engine verdict; and an Evidence Passport page with copyable
+basic/strict verify commands. axe-core WCAG 2.2 AA: 0 violations on 12 routes.
 
 ## Architecture
 
@@ -96,7 +107,7 @@ immutability alone. Demo systems are labeled as such.
 
 - [Jury dossier](docs/jury/) — overview, compliance, architecture, proofs,
   AI, security, benchmarks, business case, demo script, verification.
-- [Demo videos](docs/jury/) — `demo-v2.mp4`, 85 s narrated from real captures
+- [Demo videos](docs/jury/) — `demo-v3.mp4` (50 s, EN narration, recorded on the pre-V12 UI); `demo-v2.mp4`, 85 s narrated from real captures
   (6 scene clips + SRT; assembled per `v2-clips/shot-log.md`); V1 66 s
   (`demo.mp4`, built by `build_video.py`) kept as fallback.
 - [LabLab texts](docs/jury/lablab-submission.md) · [Slides](docs/jury/slides.md)

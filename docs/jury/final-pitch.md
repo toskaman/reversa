@@ -20,7 +20,7 @@ is irreversible, flagged before anything runs. I approve."
 every effect verified, not assumed. Fifty-nine hash-chained events. This
 run is workflow ninety — COMPLETED."
 
-"Now you break it. Hit INJECT FAILURE — billing dies with ten HTTP 500s.
+"Now you break it. Hit Simulate a failure — billing dies with ten HTTP 500s.
 Watch: detection, dependent blocking, reverse-order compensation. Each
 action undone in reverse, verified absent — workspace deleted, users
 archived. Workflow ninety-one: COMPENSATED. Eighty-one events. Recovery
