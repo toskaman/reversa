@@ -12,17 +12,17 @@ requires an engineer at 2 AM: it restores what it can, refuses to touch
 what it cannot verify, and proves the final state.
 
 **Live:** https://217.69.7.155.nip.io — zero token needed. Overview →
-Launch Interactive Demo mints its own guest session (60-min TTL, fixed
+Start demo mints its own guest session (60-min TTL, fixed
 2-workflow/2-execute quotas, own ephemeral demo org).
 
 ## 1. The Recovery Moment (click steps, ~90 s)
 
-1. Command Center → keep the Acme onboarding intent → Generate plan →
-   Shadow Preview (effects per system, billing approval flagged,
+1. New workflow → keep the Acme onboarding intent → Generate plan →
+   review the declared effects (shadow preview) (effects per system, billing approval flagged,
    `notify.send_summary` IRREVERSIBLE) → Approve.
-2. Execute → watch graph + SSE timeline go green; Connector Hub shows
+2. Execute → watch graph + SSE timeline go green; Connectors (More menu) shows
    rows in 5 isolated **demo** states (SQLite demo stores, labeled).
-3. Demo Lab → INJECT FAILURE (billing http500) + RUN as guest
+3. Demo Lab (More menu) → Simulate a failure (billing http500) as guest
    (org-scoped, cap 50/org, swept at expiry). Watch detection →
    dependent blocking → reverse-order compensation (6 true undos +
    1 read-only noop in the reference run).

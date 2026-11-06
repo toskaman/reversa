@@ -1,6 +1,6 @@
 # 09 — Demo script (3 minutes, all live)
 
-Zero token needed to start: Overview → **Launch Interactive Demo**. It mints
+Zero token needed to start: Overview → **Start demo**. It mints
 a short-lived guest session by itself (`POST /api/v1/demo/guest-sessions/public`,
 no credential; 60 min TTL, fixed 2-workflow/2-execute quotas, each session in
 its own ephemeral demo org) and runs the Acme onboarding end to end as that
@@ -12,12 +12,12 @@ matrix stays owner-only.
 
 1. **(0:00) Hook:** "AI agents do real work now. Who cleans up when step 6
    of 10 fails?" Show a half-onboarded customer across systems.
-2. **(0:25) Plan:** Command Center → Generate plan for Acme → Shadow Preview:
+2. **(0:25) Plan:** New workflow → Generate plan for Acme → declared effects (shadow preview):
    effects per system, billing approval flagged, notify.send_summary marked
    irreversible. Approve.
 3. **(0:55) Live execution:** Execute → watch graph + SSE timeline go green;
-   open Connector Hub: real rows in 5 isolated states.
-4. **(1:30) Chaos:** Demo Lab → INJECT FAILURE + RUN. Billing 500s. Watch
+   open Connectors (More menu): real rows in 5 isolated states.
+4. **(1:30) Chaos:** Demo Lab → Simulate a failure. Billing 500s. Watch
    detection, dependent blocking, reverse-order compensation.
 5. **(2:10) Self-healing proof:** resources view: workspace gone, users
    archived; workflow COMPENSATED; incident report complete.

@@ -31,9 +31,9 @@ verified preconditions, and files the incident report. Everything is
 journaled in a hash-chained Evidence Passport you can export and verify
 offline.
 
-On the live demo, one click launches Jury Mode with zero token —
+On the live demo, one click (Start demo) launches the guided demo with zero token —
 it mints its own guest session, then runs plan, approval and 10 verified
-steps across 5 systems. Then hit INJECT FAILURE yourself (guests inject
+steps across 5 systems. Then hit Simulate a failure yourself (guests inject
 org-scoped chaos, capped and auto-cleaned): billing goes down, and you
 watch detection, compensation and restoration happen for real —
 resources before, during and after.
@@ -46,7 +46,7 @@ rejected (422) and never executed, and the deterministic baseline remains
 the default with explicit fallback. Ambiguous intents get structured
 clarification, off-scope ones an explicit refusal — never a silent
 wrong template. Evals ship in-repo: 100 offline cases plus live Vultr
-campaigns (2×10 + 12-case A/B, 65,553 tokens). Release 0.2.0-rc.9 ships
+campaigns (2×10 + 12-case A/B, 65,553 tokens). Release 0.2.0-rc.10 ships
 a 792-test API suite (2 honest skips), 20/20 chaos scenarios, per-run
 recovery manifests — every claim re-runnable from the repo.
 

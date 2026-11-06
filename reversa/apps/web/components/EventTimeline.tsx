@@ -3,9 +3,10 @@
 import { useEffect, useRef, useState } from "react";
 import { api, apiBase, ApiError } from "../lib/api";
 import type { Evt } from "../lib/types";
+import { describeEvent, timeOf } from "../lib/events";
 
-export default function EventTimeline({ workflowId, refreshKey }: {
-  workflowId: number; refreshKey: number;
+export default function EventTimeline({ workflowId, refreshKey, onLiveEvent }: {
+  workflowId: number; refreshKey: number; onLiveEvent?: () => void;
 }) {
   const [events, setEvents] = useState<Evt[]>([]);
   const [live, setLive] = useState(false);
@@ -14,6 +15,8 @@ export default function EventTimeline({ workflowId, refreshKey }: {
   const lastSeqRef = useRef(0);
   const doneRef = useRef(false);
   const retryRef = useRef(0);
+  const onLiveRef = useRef(onLiveEvent);
+  onLiveRef.current = onLiveEvent;
 
   useEffect(() => {
     api<{ data: Evt[] }>(`/api/v1/workflows/${workflowId}/events?limit=500`)
@@ -33,7 +36,9 @@ export default function EventTimeline({ workflowId, refreshKey }: {
       try {
         const evt = JSON.parse(m.data) as Evt;
         if (typeof evt.seq === "number") lastSeqRef.current = evt.seq;
-        setEvents((prev) => [...prev, evt]);
+        // Guard against duplicates when a resumed stream replays an event.
+        setEvents((prev) => prev.some((p) => p.seq === evt.seq) ? prev : [...prev, evt]);
+        onLiveRef.current?.();
       } catch { /* ignore */ }
     };
     es.addEventListener("done", () => {
@@ -90,20 +95,36 @@ export default function EventTimeline({ workflowId, refreshKey }: {
     }
   }
 
+  const shown = [...events].reverse();
   return (
     <div>
-      <button className="ghost" onClick={toggleLive}>{live ? "Stop live" : "Watch live"}</button>
-      {error && <p className="muted">{error}</p>}
-      <div className="timeline">
-        {events.map((e) => (
-          <div key={e.seq}>
-            <code>#{e.seq}</code> <code>{e.type}</code>{" "}
-            <span className="muted">{e.actor}</span>{" "}
-            <code>{JSON.stringify(e.payload).slice(0, 160)}</code>
-          </div>
-        ))}
-        {events.length === 0 && <p className="muted">No events yet.</p>}
+      <div className="actions" style={{ justifyContent: "space-between", marginBottom: 8 }}>
+        <span className="small muted" aria-live="polite">
+          {live ? "● Live: new events appear at the top" : `${events.length} events, newest first`}
+        </span>
+        <button className="ghost" onClick={toggleLive} aria-pressed={live}>{live ? "Stop live" : "Watch live"}</button>
       </div>
+      {error && <p className="muted small" role="status">{error}</p>}
+      {events.length === 0 ? <p className="muted">No events yet.</p> : (
+        <ol className="events scroll" aria-label="Event log, newest first">
+          {shown.map((e) => {
+            const v = describeEvent(e);
+            return (
+              <li key={e.seq}>
+                <span className="ev-seq">#{e.seq}</span>
+                <span className={`ev-dot tone-${v.tone}`} aria-hidden="true" />
+                <div style={{ minWidth: 0 }}>
+                  <div>{v.text}</div>
+                  <details className="ev-raw">
+                    <summary><span className="ev-meta">{timeOf(e.ts)} · {e.actor} · <code>{e.type}</code></span></summary>
+                    <pre>{JSON.stringify(e.payload, null, 2)}</pre>
+                  </details>
+                </div>
+              </li>
+            );
+          })}
+        </ol>
+      )}
     </div>
   );
 }

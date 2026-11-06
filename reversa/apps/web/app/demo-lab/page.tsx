@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { api, ApiError } from "../../lib/api";
+import { Callout, Empty, PageHead } from "../../components/ui";
 
 interface Rule {
   id: number; target_connector: string; target_action: string;
@@ -34,7 +35,7 @@ export default function DemoLab() {
     try {
       await api("/api/v1/demo/chaos", { method: "POST", body: JSON.stringify(
         { target_connector: connector, fault, times }) });
-      setNotice(`Injected ${fault} on ${connector} x${times}.`);
+      setNotice(`Armed ${fault} on ${connector} for the next ${times} call(s).`);
       load();
     } catch (e) { setError(e instanceof ApiError ? e.message : String(e)); }
   }
@@ -65,7 +66,7 @@ export default function DemoLab() {
       }
       await api(`/api/v1/workflows/${id}/execute`, { method: "POST" });
       setChaosWf(id);
-      setNotice("Chaos scenario finished — billing failed, compensations ran.");
+      setNotice("Chaos scenario finished: billing failed, REVERSA blocked dependent steps and ran compensations.");
       load();
     } catch (e) { setError(e instanceof ApiError ? e.message : String(e)); }
     finally { setBusy(false); }
@@ -73,47 +74,89 @@ export default function DemoLab() {
 
   return (
     <div>
-      <h1>Demo Lab</h1>
-      <p className="sub">Failure injection for the demo tenant only. Never touches real
-        systems.</p>
-      {error && <div className="err">{error}</div>}
-      {notice && <div className="ok">{notice}</div>}
-      <div className="card">
-        <h2>One-click chaos scenario</h2>
-        <p className="muted">Injects billing 500s, onboards Acme, watches REVERSA
-          detect, compensate and report.</p>
-        <button className="danger" onClick={runChaosScenario} disabled={busy}>
-          {busy ? "Running…" : "INJECT FAILURE + RUN"}</button>
-        {chaosWf && <Link className="btn ghost" href={`/workflows/${chaosWf}`}>
-          Open result #{chaosWf}</Link>}
-      </div>
-      <div className="card">
-        <h2>Manual injection</h2>
-        <label>Connector</label>
-        <select value={connector} onChange={(e) => setConnector(e.target.value)}>
-          {CONNECTORS.map((c) => <option key={c} value={c}>{c}</option>)}
-        </select>
-        <label>Fault</label>
-        <select value={fault} onChange={(e) => setFault(e.target.value)}>
-          {FAULTS.map((f) => <option key={f} value={f}>{f}</option>)}
-        </select>
-        <label>Times</label>
-        <input type="number" min={1} max={10} value={times}
-          onChange={(e) => setTimes(Number(e.target.value))} />
-        <div><button onClick={inject}>Inject</button></div>
-      </div>
-      <h2>Active rules ({rules.length})</h2>
-      <div className="table-wrap">
-      <table><thead><tr><th>ID</th><th>Target</th><th>Fault</th><th>Left</th>
-        <th /></tr></thead>
-        <tbody>{rules.map((r) => (
-          <tr key={r.id}><td>{r.id}</td>
-            <td><code>{r.target_connector}</code> {r.target_action}</td>
-            <td>{r.fault}</td><td>{r.times_remaining}</td>
-            <td><button className="ghost" onClick={() => remove(r.id)}>Delete</button></td>
-          </tr>
-        ))}</tbody></table>
-      </div>
+      <PageHead eyebrow="Demo Lab" title="Watch REVERSA recover from a failure"
+        sub="Make the billing system fail in the middle of a customer onboarding, then see REVERSA detect it, block what depends on it, and reverse completed work in order." />
+      {error && <div className="err" role="alert">{error}</div>}
+
+      <section className="card" aria-labelledby="sim-title">
+        <div className="split">
+          <div>
+            <h2 id="sim-title">Simulate a failure</h2>
+            <ol className="small" style={{ paddingLeft: 18, color: "var(--fg2)", margin: "0 0 16px" }}>
+              <li>The demo billing system is set to return errors.</li>
+              <li>An Acme onboarding (10 steps, 5 systems) is planned, approved and run.</li>
+              <li>Billing fails at step 6. Retries are bounded, then REVERSA compensates.</li>
+              <li>You get the verified outcome and an Evidence Passport.</li>
+            </ol>
+            <div className="actions">
+              <button className="lg" onClick={runChaosScenario} disabled={busy}>
+                {busy ? "Running the scenario…" : "Simulate a failure"}</button>
+            </div>
+            <p className="small muted" role="status" aria-live="polite" style={{ marginTop: 10 }}>
+              {busy ? "Running. This usually takes a few seconds." : ""}</p>
+          </div>
+          <Callout tone="info" title="Isolated demo systems only">
+            <p className="small">Faults apply only to the labeled demo connectors of your demo organization.
+              Real systems are never touched. Guest sessions are capped and cleaned up automatically.</p>
+          </Callout>
+        </div>
+        {notice && (
+          <div className="callout good" role="status" style={{ marginTop: 16, marginBottom: 0 }}>
+            <span className="callout-glyph" aria-hidden="true">✓</span>
+            <div className="callout-body">
+              <p>{notice}</p>
+              {chaosWf && <div className="actions">
+                <Link className="btn" href={`/workflows/${chaosWf}`}>Open result #{chaosWf}</Link>
+                <Link className="btn ghost" href="/recovery">Recovery overview</Link>
+                <Link className="btn ghost" href={`/evidence/${chaosWf}`}>Evidence</Link>
+              </div>}
+            </div>
+          </div>
+        )}
+      </section>
+
+      <details className="disclosure">
+        <summary>Manual fault injection <span className="muted">· advanced</span></summary>
+        <div className="disclosure-body">
+          <p className="muted small">Arm a fault on one demo connector. It triggers on the next matching
+            calls of any workflow you run in this demo organization.</p>
+          <div className="grid" style={{ gridTemplateColumns: "repeat(auto-fit, minmax(160px, 1fr))" }}>
+            <div className="field"><label htmlFor="dl-conn">Connector</label>
+              <select id="dl-conn" value={connector} onChange={(e) => setConnector(e.target.value)}>
+                {CONNECTORS.map((c) => <option key={c} value={c}>{c}</option>)}
+              </select></div>
+            <div className="field"><label htmlFor="dl-fault">Fault</label>
+              <select id="dl-fault" value={fault} onChange={(e) => setFault(e.target.value)}>
+                {FAULTS.map((f) => <option key={f} value={f}>{f}</option>)}
+              </select></div>
+            <div className="field"><label htmlFor="dl-times">Times</label>
+              <input id="dl-times" type="number" min={1} max={10} value={times}
+                onChange={(e) => setTimes(Number(e.target.value))} /></div>
+          </div>
+          <button className="ghost" onClick={inject}>Arm fault</button>
+        </div>
+      </details>
+
+      <section aria-labelledby="rules-title">
+        <div className="section-head"><h2 id="rules-title">Armed faults</h2>
+          <span className="small muted">{rules.length} active</span></div>
+        <div className="card flush">
+          {rules.length === 0 ? <div style={{ padding: 20 }}><Empty title="No faults armed">Faults are consumed as they trigger.</Empty></div> : (
+            <div className="table-wrap">
+              <table><caption className="sr-only">Armed faults</caption>
+                <thead><tr><th className="num">ID</th><th>Target</th><th>Fault</th><th className="num">Remaining</th><th><span className="sr-only">Remove</span></th></tr></thead>
+                <tbody>{rules.map((r) => (
+                  <tr key={r.id}><td className="num muted">{r.id}</td>
+                    <td><code>{r.target_connector}</code> {r.target_action}</td>
+                    <td>{r.fault}</td><td className="num">{r.times_remaining}</td>
+                    <td className="num"><button className="ghost" onClick={() => remove(r.id)}
+                      aria-label={`Remove fault ${r.id}`}>Remove</button></td>
+                  </tr>
+                ))}</tbody></table>
+            </div>
+          )}
+        </div>
+      </section>
     </div>
   );
 }

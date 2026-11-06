@@ -64,24 +64,30 @@ export default function Settings() {
   return (
     <div>
       <h1>Settings</h1>
-      <p className="sub">Connection and organization.</p>
-      {error && <div className="err">{error}</div>}
-      {notice && <div className="ok">{notice}</div>}
+      <p className="sub">Connect this console to a REVERSA API with an organization token. Not needed for the
+        interactive demo, which creates its own temporary session.</p>
+      {error && <div className="err" role="alert">{error}</div>}
+      {notice && <div className="ok" role="status">{notice}</div>}
       <div className="card">
-        <label>API base URL (blank = {process.env.NEXT_PUBLIC_API_URL ||
-          "http://localhost:8000"})</label>
-        <input value={apiUrl} onChange={(e) => setApiUrl(e.target.value)}
-          placeholder="https://api.example.com" />
-        <label>Organization API token (stored only in this browser)</label>
-        <input type="password" value={token}
-          onChange={(e) => setToken(e.target.value)}
-          placeholder="rev_demo_…" autoComplete="off" />
-        <div>
+        <div className="field">
+          <label htmlFor="api-url">API base URL</label>
+          <input id="api-url" value={apiUrl} onChange={(e) => setApiUrl(e.target.value)}
+            placeholder="https://api.example.com" aria-describedby="api-url-h" />
+          <p className="hint" id="api-url-h">Leave blank to use {process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000"}.</p>
+        </div>
+        <div className="field">
+          <label htmlFor="api-token">Organization API token</label>
+          <input id="api-token" type="password" value={token}
+            onChange={(e) => setToken(e.target.value)}
+            placeholder="rev_demo_…" autoComplete="off" aria-describedby="api-token-h" />
+          <p className="hint" id="api-token-h">Stored only in this browser. Never sent anywhere except the API above.</p>
+        </div>
+        <div className="actions">
           <button onClick={save}>Save</button>
           <button className="ghost" onClick={test}>Test connection</button>
         </div>
       </div>
-      {health && <div className="card"><h2>Health</h2><p>{health}</p></div>}
+      {health && <div className="card"><h2>API health</h2><p>{health}</p></div>}
       {me && (
         <div className="card"><h2>Organization</h2>
           <p><code>{me.org_slug}</code> · demo tenant: {me.is_demo ? "yes" : "no"} ·

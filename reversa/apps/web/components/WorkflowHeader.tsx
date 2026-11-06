@@ -10,11 +10,8 @@ import {
   type WorkflowProvenance,
 } from "./WorkflowHeaderProvenance";
 
-// Cycle 2 §6 (minimal provenance UI): badge + native tooltip showing the
-// planner provider/model/latency/warnings quoted from the workflow.created
-// event payload. Unknown values render as "not recorded" (same wording as
-// the AI Decision Inspector). The full AI Decision Inspector stays Cycle 4
-// (spec non-goal: no UI redesign).
+// Cycle 2 §6 provenance badge: planner provider/model/latency/warnings quoted
+// from the workflow.created event payload; unknown values read "not recorded".
 export function ProvenanceBadge({ provenance }: {
   provenance: WorkflowProvenance;
 }) {
@@ -27,19 +24,20 @@ export function ProvenanceBadge({ provenance }: {
   );
 }
 
-// Drop-in header for the workflow detail view: title + status + plan hash
-// plus the provenance badge. Takes the raw workflow.created payload so the
-// caller only fetches events (same source as DecisionInspector).
 export default function WorkflowHeader({ workflow, createdPayload }: {
   workflow: Workflow;
   createdPayload?: unknown;
 }) {
   return (
     <div>
+      <p className="eyebrow">Workflow #{workflow.id}</p>
       <h1>{workflow.name}</h1>
-      <p className="sub">#{workflow.id} · <StatusBadge state={workflow.state} /> ·
-        plan <code>{(workflow.plan_hash || "").slice(0, 12)}…</code> ·{" "}
-        <ProvenanceBadge provenance={extractProvenance(createdPayload)} /></p>
+      <div className="actions" style={{ gap: 10 }}>
+        <StatusBadge state={workflow.state} />
+        <ProvenanceBadge provenance={extractProvenance(createdPayload)} />
+        <span className="small muted">plan <code>{(workflow.plan_hash || "").slice(0, 12)}…</code>
+          {" "}· v{workflow.plan_version} · by {workflow.created_by}</span>
+      </div>
     </div>
   );
 }

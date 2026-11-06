@@ -38,8 +38,8 @@ export default function ExecutionComparisonPage() {
       {error && <div className="err">{error}</div>}
       <div className="row">
         <div>
-          <label>Run A</label>
-          <select value={idA ?? ""} onChange={(e) =>
+          <label htmlFor="cmp-a">Run A</label>
+          <select id="cmp-a" value={idA ?? ""} onChange={(e) =>
             setIdA(e.target.value ? Number(e.target.value) : null)}>
             <option value="">— pick a run —</option>
             {items.map((w) => (
@@ -48,8 +48,8 @@ export default function ExecutionComparisonPage() {
           </select>
         </div>
         <div>
-          <label>Run B</label>
-          <select value={idB ?? ""} onChange={(e) =>
+          <label htmlFor="cmp-b">Run B</label>
+          <select id="cmp-b" value={idB ?? ""} onChange={(e) =>
             setIdB(e.target.value ? Number(e.target.value) : null)}>
             <option value="">— pick a run —</option>
             {items.map((w) => (

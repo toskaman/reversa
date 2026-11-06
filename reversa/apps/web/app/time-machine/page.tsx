@@ -36,8 +36,8 @@ export default function TimeMachinePage() {
         Recovery Proof Engine verdict. Compare
         runs in <Link href="/recovery-race">Execution Comparison</Link>.</p>
       {error && <div className="err">{error}</div>}
-      <label>Run</label>
-      <select value={id ?? ""} onChange={(e) =>
+      <label htmlFor="tm-run">Run</label>
+      <select id="tm-run" value={id ?? ""} onChange={(e) =>
         setId(e.target.value ? Number(e.target.value) : null)}>
         <option value="">— pick a run —</option>
         {items.map((w) => (
