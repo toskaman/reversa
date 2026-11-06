@@ -1,0 +1,1789 @@
+{
+  "generator": "reversa/0.2.0-rc.10",
+  "exported_at": "2026-11-06T22:31:26.371119",
+  "org_slug": "acme-demo",
+  "view": "canonical",
+  "workflow": {
+    "id": 2,
+    "name": "Onboard customer",
+    "intent": "Onboard Acme Corporation as an enterprise customer.",
+    "state": "COMPENSATED",
+    "plan_version": 1,
+    "created_by": "token:demo",
+    "created_at": "2026-11-06T22:30:43.164737",
+    "updated_at": "2026-11-06T22:30:44.650107"
+  },
+  "plan": {
+    "goal": "Onboard Acme Corporation as an enterprise customer.",
+    "steps": [
+      {
+        "seq": 1,
+        "action_type": "crm.validate_customer",
+        "connector_id": "demo-crm",
+        "inputs": {
+          "customer_name": "Acme Corporation"
+        },
+        "depends_on": [],
+        "compensation_capability": "COMPENSATABLE",
+        "max_attempts": 3,
+        "approval_policy": "AUTO_ALLOWED",
+        "risk_level": "low"
+      },
+      {
+        "seq": 2,
+        "action_type": "crm.create_organization",
+        "connector_id": "demo-crm",
+        "inputs": {
+          "org_slug": "acme",
+          "company_name": "Acme Corporation"
+        },
+        "depends_on": [
+          1
+        ],
+        "compensation_capability": "COMPENSATABLE",
+        "max_attempts": 3,
+        "approval_policy": "AUTO_ALLOWED",
+        "risk_level": "medium"
+      },
+      {
+        "seq": 3,
+        "action_type": "identity.create_workspace",
+        "connector_id": "demo-identity",
+        "inputs": {
+          "org_slug": "acme"
+        },
+        "depends_on": [
+          2
+        ],
+        "compensation_capability": "FULLY_REVERSIBLE",
+        "max_attempts": 3,
+        "approval_policy": "AUTO_ALLOWED",
+        "risk_level": "medium"
+      },
+      {
+        "seq": 4,
+        "action_type": "identity.provision_users",
+        "connector_id": "demo-identity",
+        "inputs": {
+          "workspace": "acme",
+          "users": [
+            {
+              "email": "ada@acme.example",
+              "name": "Ada"
+            },
+            {
+              "email": "grace@acme.example",
+              "name": "Grace"
+            },
+            {
+              "email": "linus@acme.example",
+              "name": "Linus"
+            },
+            {
+              "email": "margaret@acme.example",
+              "name": "Margaret"
+            }
+          ]
+        },
+        "depends_on": [
+          3
+        ],
+        "compensation_capability": "COMPENSATABLE",
+        "max_attempts": 3,
+        "approval_policy": "AUTO_ALLOWED",
+        "risk_level": "medium"
+      },
+      {
+        "seq": 5,
+        "action_type": "support.create_queue",
+        "connector_id": "demo-support",
+        "inputs": {
+          "org_slug": "acme",
+          "tier": "enterprise"
+        },
+        "depends_on": [
+          2
+        ],
+        "compensation_capability": "COMPENSATABLE",
+        "max_attempts": 3,
+        "approval_policy": "AUTO_ALLOWED",
+        "risk_level": "low"
+      },
+      {
+        "seq": 6,
+        "action_type": "billing.create_profile",
+        "connector_id": "demo-billing",
+        "inputs": {
+          "org_slug": "acme",
+          "plan": "enterprise"
+        },
+        "depends_on": [
+          2
+        ],
+        "compensation_capability": "CONDITIONALLY_REVERSIBLE",
+        "max_attempts": 2,
+        "approval_policy": "APPROVAL_REQUIRED",
+        "risk_level": "high"
+      },
+      {
+        "seq": 7,
+        "action_type": "identity.assign_manager",
+        "connector_id": "demo-identity",
+        "inputs": {
+          "workspace": "acme",
+          "manager_email": "am@reversa.example"
+        },
+        "depends_on": [
+          3
+        ],
+        "compensation_capability": "FULLY_REVERSIBLE",
+        "max_attempts": 3,
+        "approval_policy": "AUTO_ALLOWED",
+        "risk_level": "low"
+      },
+      {
+        "seq": 8,
+        "action_type": "support.create_checklist",
+        "connector_id": "demo-support",
+        "inputs": {
+          "org_slug": "acme"
+        },
+        "depends_on": [
+          5
+        ],
+        "compensation_capability": "COMPENSATABLE",
+        "max_attempts": 3,
+        "approval_policy": "AUTO_ALLOWED",
+        "risk_level": "low"
+      },
+      {
+        "seq": 9,
+        "action_type": "core.consistency_check",
+        "connector_id": "reversa-core",
+        "inputs": {
+          "org_slug": "acme"
+        },
+        "depends_on": [
+          4,
+          6,
+          7,
+          8
+        ],
+        "compensation_capability": "COMPENSATABLE",
+        "max_attempts": 1,
+        "approval_policy": "AUTO_ALLOWED",
+        "risk_level": "low"
+      },
+      {
+        "seq": 10,
+        "action_type": "notify.send_summary",
+        "connector_id": "demo-notify",
+        "inputs": {
+          "channel": "email",
+          "message": "Onboarding complete for Acme Corporation"
+        },
+        "depends_on": [
+          9
+        ],
+        "compensation_capability": "IRREVERSIBLE",
+        "max_attempts": 3,
+        "approval_policy": "AUTO_ALLOWED",
+        "risk_level": "medium"
+      }
+    ]
+  },
+  "actions": [
+    {
+      "seq": 1,
+      "action_type": "crm.validate_customer",
+      "connector_id": "demo-crm",
+      "state": "COMPENSATED",
+      "attempt": 1,
+      "max_attempts": 3,
+      "compensation_capability": "COMPENSATABLE",
+      "inputs": {
+        "customer_name": "Acme Corporation"
+      },
+      "output": {
+        "valid": true,
+        "customer_name": "Acme Corporation"
+      },
+      "error": ""
+    },
+    {
+      "seq": 2,
+      "action_type": "crm.create_organization",
+      "connector_id": "demo-crm",
+      "state": "COMPENSATED",
+      "attempt": 1,
+      "max_attempts": 3,
+      "compensation_capability": "COMPENSATABLE",
+      "inputs": {
+        "org_slug": "acme",
+        "company_name": "Acme Corporation"
+      },
+      "output": {
+        "resource": {
+          "store": "crm",
+          "kind": "organization",
+          "name": "acme",
+          "id": 2,
+          "version": 1
+        },
+        "_comp_proof": {
+          "archived": {
+            "store": "crm",
+            "kind": "organization",
+            "name": "acme",
+            "id": 2,
+            "version": 2
+          }
+        }
+      },
+      "error": ""
+    },
+    {
+      "seq": 3,
+      "action_type": "identity.create_workspace",
+      "connector_id": "demo-identity",
+      "state": "COMPENSATED",
+      "attempt": 1,
+      "max_attempts": 3,
+      "compensation_capability": "FULLY_REVERSIBLE",
+      "inputs": {
+        "org_slug": "acme"
+      },
+      "output": {
+        "resource": {
+          "store": "identity",
+          "kind": "workspace",
+          "name": "acme",
+          "id": 6,
+          "version": 1
+        },
+        "data": {
+          "manager": null,
+          "_reversa_run": 2
+        },
+        "_comp_proof": {
+          "deleted": true,
+          "snapshot": {
+            "id": 6,
+            "kind": "workspace",
+            "name": "acme",
+            "data": {
+              "manager": null,
+              "_reversa_run": 2
+            },
+            "version": 3,
+            "status": "active"
+          }
+        }
+      },
+      "error": ""
+    },
+    {
+      "seq": 4,
+      "action_type": "identity.provision_users",
+      "connector_id": "demo-identity",
+      "state": "COMPENSATED",
+      "attempt": 1,
+      "max_attempts": 3,
+      "compensation_capability": "COMPENSATABLE",
+      "inputs": {
+        "workspace": "acme",
+        "users": [
+          {
+            "email": "ada@acme.example",
+            "name": "Ada"
+          },
+          {
+            "email": "grace@acme.example",
+            "name": "Grace"
+          },
+          {
+            "email": "linus@acme.example",
+            "name": "Linus"
+          },
+          {
+            "email": "margaret@acme.example",
+            "name": "Margaret"
+          }
+        ]
+      },
+      "output": {
+        "users": [
+          {
+            "store": "identity",
+            "kind": "user",
+            "name": "ada@acme.example",
+            "id": 7,
+            "version": 1
+          },
+          {
+            "store": "identity",
+            "kind": "user",
+            "name": "grace@acme.example",
+            "id": 8,
+            "version": 1
+          },
+          {
+            "store": "identity",
+            "kind": "user",
+            "name": "linus@acme.example",
+            "id": 9,
+            "version": 1
+          },
+          {
+            "store": "identity",
+            "kind": "user",
+            "name": "margaret@acme.example",
+            "id": 10,
+            "version": 1
+          }
+        ],
+        "_comp_proof": {
+          "archived_users": [
+            {
+              "store": "identity",
+              "kind": "user",
+              "name": "ada@acme.example",
+              "id": 7,
+              "version": 2
+            },
+            {
+              "store": "identity",
+              "kind": "user",
+              "name": "grace@acme.example",
+              "id": 8,
+              "version": 2
+            },
+            {
+              "store": "identity",
+              "kind": "user",
+              "name": "linus@acme.example",
+              "id": 9,
+              "version": 2
+            },
+            {
+              "store": "identity",
+              "kind": "user",
+              "name": "margaret@acme.example",
+              "id": 10,
+              "version": 2
+            }
+          ]
+        }
+      },
+      "error": ""
+    },
+    {
+      "seq": 5,
+      "action_type": "support.create_queue",
+      "connector_id": "demo-support",
+      "state": "COMPENSATED",
+      "attempt": 1,
+      "max_attempts": 3,
+      "compensation_capability": "COMPENSATABLE",
+      "inputs": {
+        "org_slug": "acme",
+        "tier": "enterprise"
+      },
+      "output": {
+        "resource": {
+          "store": "support",
+          "kind": "queue",
+          "name": "acme",
+          "id": 3,
+          "version": 1
+        },
+        "_comp_proof": {
+          "archived": {
+            "store": "support",
+            "kind": "queue",
+            "name": "acme",
+            "id": 3,
+            "version": 2
+          }
+        }
+      },
+      "error": ""
+    },
+    {
+      "seq": 6,
+      "action_type": "billing.create_profile",
+      "connector_id": "demo-billing",
+      "state": "FAILED",
+      "attempt": 2,
+      "max_attempts": 2,
+      "compensation_capability": "CONDITIONALLY_REVERSIBLE",
+      "inputs": {
+        "org_slug": "acme",
+        "plan": "enterprise"
+      },
+      "output": {
+        "_failure": {
+          "code": "CHAOS_HTTP500",
+          "retryable": true,
+          "error": "chaos: demo-billing/billing.create_profile 500"
+        }
+      },
+      "error": "CHAOS_HTTP500: chaos: demo-billing/billing.create_profile 500"
+    },
+    {
+      "seq": 7,
+      "action_type": "identity.assign_manager",
+      "connector_id": "demo-identity",
+      "state": "COMPENSATED",
+      "attempt": 1,
+      "max_attempts": 3,
+      "compensation_capability": "FULLY_REVERSIBLE",
+      "inputs": {
+        "workspace": "acme",
+        "manager_email": "am@reversa.example"
+      },
+      "output": {
+        "resource": {
+          "store": "identity",
+          "kind": "workspace",
+          "name": "acme",
+          "id": 6,
+          "version": 2
+        },
+        "previous_manager": null,
+        "_comp_proof": {
+          "restored": {
+            "store": "identity",
+            "kind": "workspace",
+            "name": "acme",
+            "id": 6,
+            "version": 3
+          },
+          "manager": null
+        }
+      },
+      "error": ""
+    },
+    {
+      "seq": 8,
+      "action_type": "support.create_checklist",
+      "connector_id": "demo-support",
+      "state": "COMPENSATED",
+      "attempt": 1,
+      "max_attempts": 3,
+      "compensation_capability": "COMPENSATABLE",
+      "inputs": {
+        "org_slug": "acme"
+      },
+      "output": {
+        "resource": {
+          "store": "support",
+          "kind": "checklist",
+          "name": "acme",
+          "id": 4,
+          "version": 1
+        },
+        "_comp_proof": {
+          "archived": {
+            "store": "support",
+            "kind": "checklist",
+            "name": "acme",
+            "id": 4,
+            "version": 2
+          }
+        }
+      },
+      "error": ""
+    },
+    {
+      "seq": 9,
+      "action_type": "core.consistency_check",
+      "connector_id": "reversa-core",
+      "state": "SKIPPED",
+      "attempt": 0,
+      "max_attempts": 1,
+      "compensation_capability": "COMPENSATABLE",
+      "inputs": {
+        "org_slug": "acme"
+      },
+      "output": {},
+      "error": ""
+    },
+    {
+      "seq": 10,
+      "action_type": "notify.send_summary",
+      "connector_id": "demo-notify",
+      "state": "SKIPPED",
+      "attempt": 0,
+      "max_attempts": 3,
+      "compensation_capability": "IRREVERSIBLE",
+      "inputs": {
+        "channel": "email",
+        "message": "Onboarding complete for Acme Corporation"
+      },
+      "output": {},
+      "error": ""
+    }
+  ],
+  "events": [
+    {
+      "seq": 1,
+      "ts": "2026-11-06T22:30:43.166901",
+      "type": "workflow.created",
+      "actor": "token:demo",
+      "org_id": 1,
+      "payload": {
+        "provider": "deterministic",
+        "model": "",
+        "latency_ms": 0,
+        "usage": {},
+        "warnings": []
+      },
+      "prev_hash": "GENESIS",
+      "hash": "426d8dbd72fb4692f464cb70cacbe00183ce3c736ca02963b120cf5a1ccda903"
+    },
+    {
+      "seq": 2,
+      "ts": "2026-11-06T22:30:43.167685",
+      "type": "workflow.state",
+      "actor": "token:demo",
+      "org_id": 1,
+      "payload": {
+        "from": "DRAFT",
+        "to": "PLANNED",
+        "note": "plan accepted"
+      },
+      "prev_hash": "426d8dbd72fb4692f464cb70cacbe00183ce3c736ca02963b120cf5a1ccda903",
+      "hash": "69d273504d424ec6b660834cf61ed72daeb172eb3cc5aa35cd1da5ed84fdd260"
+    },
+    {
+      "seq": 3,
+      "ts": "2026-11-06T22:30:43.168472",
+      "type": "workflow.state",
+      "actor": "token:demo",
+      "org_id": 1,
+      "payload": {
+        "from": "PLANNED",
+        "to": "VALIDATED",
+        "note": "schema+policy+DAG valid"
+      },
+      "prev_hash": "69d273504d424ec6b660834cf61ed72daeb172eb3cc5aa35cd1da5ed84fdd260",
+      "hash": "73f9edb6faba6bc3f496db4b7ce9bfe663dd5ca8bf1df2375848617102bed104"
+    },
+    {
+      "seq": 4,
+      "ts": "2026-11-06T22:30:43.169360",
+      "type": "workflow.state",
+      "actor": "token:demo",
+      "org_id": 1,
+      "payload": {
+        "from": "VALIDATED",
+        "to": "AWAITING_APPROVAL",
+        "note": "sensitive steps present"
+      },
+      "prev_hash": "73f9edb6faba6bc3f496db4b7ce9bfe663dd5ca8bf1df2375848617102bed104",
+      "hash": "bda1ec6dd27d6cdaf0b4027868a0c0769ae0ee956a606d41accf5db377b023cf"
+    },
+    {
+      "seq": 5,
+      "ts": "2026-11-06T22:30:43.206072",
+      "type": "workflow.state",
+      "actor": "token:demo",
+      "org_id": 1,
+      "payload": {
+        "from": "AWAITING_APPROVAL",
+        "to": "READY",
+        "note": "approved by token:demo"
+      },
+      "prev_hash": "bda1ec6dd27d6cdaf0b4027868a0c0769ae0ee956a606d41accf5db377b023cf",
+      "hash": "5c794d2287a1af67be91ce4ff2797276a3fe2f602c7de6ca6df2f5374def7e75"
+    },
+    {
+      "seq": 6,
+      "ts": "2026-11-06T22:30:43.206932",
+      "type": "approval.granted",
+      "actor": "token:demo",
+      "org_id": 1,
+      "payload": {
+        "decided_by": "token:demo",
+        "decided_by_label": "demo-lab"
+      },
+      "prev_hash": "5c794d2287a1af67be91ce4ff2797276a3fe2f602c7de6ca6df2f5374def7e75",
+      "hash": "a21fba02d0f97f05449c134276fc4f4762cea5377192484748882953982e21a2"
+    },
+    {
+      "seq": 7,
+      "ts": "2026-11-06T22:30:43.228773",
+      "type": "workflow.state",
+      "actor": "worker-1",
+      "org_id": 1,
+      "payload": {
+        "from": "READY",
+        "to": "RUNNING",
+        "note": "execution started"
+      },
+      "prev_hash": "a21fba02d0f97f05449c134276fc4f4762cea5377192484748882953982e21a2",
+      "hash": "eab516a5d7670e1560fc7b9a3687854feb30abbba612934b787e6d00ad5c86bf"
+    },
+    {
+      "seq": 8,
+      "ts": "2026-11-06T22:30:43.236901",
+      "type": "action.claimed",
+      "actor": "worker-1",
+      "org_id": 1,
+      "payload": {
+        "seq": 1,
+        "worker": "worker-1"
+      },
+      "prev_hash": "eab516a5d7670e1560fc7b9a3687854feb30abbba612934b787e6d00ad5c86bf",
+      "hash": "30e99fe02c1bd1d695660362e8fef95a9ea68fab457da00d3672f8ed1fac131a"
+    },
+    {
+      "seq": 9,
+      "ts": "2026-11-06T22:30:43.239178",
+      "type": "action.state",
+      "actor": "worker-1",
+      "org_id": 1,
+      "payload": {
+        "seq": 1,
+        "action_type": "crm.validate_customer",
+        "from": "CLAIMED",
+        "to": "EXECUTING",
+        "note": "attempt 1"
+      },
+      "prev_hash": "30e99fe02c1bd1d695660362e8fef95a9ea68fab457da00d3672f8ed1fac131a",
+      "hash": "d90cc1fb8e03fbc8487d7bc104a8548fac0d065263e6495bbeb7ecfbbbeefed2"
+    },
+    {
+      "seq": 10,
+      "ts": "2026-11-06T22:30:43.244745",
+      "type": "action.state",
+      "actor": "worker-1",
+      "org_id": 1,
+      "payload": {
+        "seq": 1,
+        "action_type": "crm.validate_customer",
+        "from": "EXECUTING",
+        "to": "SUCCEEDED",
+        "note": "effect applied"
+      },
+      "prev_hash": "d90cc1fb8e03fbc8487d7bc104a8548fac0d065263e6495bbeb7ecfbbbeefed2",
+      "hash": "b3691a77f829935a440815e2e8235425ddf77ffdb1add70999c1b2b5415d8a6a"
+    },
+    {
+      "seq": 11,
+      "ts": "2026-11-06T22:30:43.248113",
+      "type": "action.state",
+      "actor": "worker-1",
+      "org_id": 1,
+      "payload": {
+        "seq": 1,
+        "action_type": "crm.validate_customer",
+        "from": "SUCCEEDED",
+        "to": "VERIFYING",
+        "note": "checking effect"
+      },
+      "prev_hash": "b3691a77f829935a440815e2e8235425ddf77ffdb1add70999c1b2b5415d8a6a",
+      "hash": "7499ffcbc35b550fd0a18fcd9fd14b726a273df1faa5d7c88ff0d7bbd7a18209"
+    },
+    {
+      "seq": 12,
+      "ts": "2026-11-06T22:30:43.250493",
+      "type": "action.state",
+      "actor": "worker-1",
+      "org_id": 1,
+      "payload": {
+        "seq": 1,
+        "action_type": "crm.validate_customer",
+        "from": "VERIFYING",
+        "to": "VERIFIED",
+        "note": "effect confirmed"
+      },
+      "prev_hash": "7499ffcbc35b550fd0a18fcd9fd14b726a273df1faa5d7c88ff0d7bbd7a18209",
+      "hash": "ec0a1656339ca503425e4e329e268d71c150a3f90f7abb6d6ab751d66cf8a872"
+    },
+    {
+      "seq": 13,
+      "ts": "2026-11-06T22:30:43.257077",
+      "type": "action.claimed",
+      "actor": "worker-1",
+      "org_id": 1,
+      "payload": {
+        "seq": 2,
+        "worker": "worker-1"
+      },
+      "prev_hash": "ec0a1656339ca503425e4e329e268d71c150a3f90f7abb6d6ab751d66cf8a872",
+      "hash": "44db45c852caff7227b38744d6aa20bb8712d6da712675c324f10104003b24f3"
+    },
+    {
+      "seq": 14,
+      "ts": "2026-11-06T22:30:43.260209",
+      "type": "action.state",
+      "actor": "worker-1",
+      "org_id": 1,
+      "payload": {
+        "seq": 2,
+        "action_type": "crm.create_organization",
+        "from": "CLAIMED",
+        "to": "EXECUTING",
+        "note": "attempt 1"
+      },
+      "prev_hash": "44db45c852caff7227b38744d6aa20bb8712d6da712675c324f10104003b24f3",
+      "hash": "435182f71a740b70b8c800d63cea5d365f74d5dec7d1ebaf6c829d954961c41e"
+    },
+    {
+      "seq": 15,
+      "ts": "2026-11-06T22:30:43.264489",
+      "type": "action.state",
+      "actor": "worker-1",
+      "org_id": 1,
+      "payload": {
+        "seq": 2,
+        "action_type": "crm.create_organization",
+        "from": "EXECUTING",
+        "to": "SUCCEEDED",
+        "note": "effect applied"
+      },
+      "prev_hash": "435182f71a740b70b8c800d63cea5d365f74d5dec7d1ebaf6c829d954961c41e",
+      "hash": "1b6f0520ca2041422ce2e99d53792d6b560feaaec8dd62fb1473cc2a6500f244"
+    },
+    {
+      "seq": 16,
+      "ts": "2026-11-06T22:30:43.267888",
+      "type": "action.state",
+      "actor": "worker-1",
+      "org_id": 1,
+      "payload": {
+        "seq": 2,
+        "action_type": "crm.create_organization",
+        "from": "SUCCEEDED",
+        "to": "VERIFYING",
+        "note": "checking effect"
+      },
+      "prev_hash": "1b6f0520ca2041422ce2e99d53792d6b560feaaec8dd62fb1473cc2a6500f244",
+      "hash": "a413eb4d9ad76bff9c0d045293888e4e4a3d6d51716ae23d3aacfbb4e755de99"
+    },
+    {
+      "seq": 17,
+      "ts": "2026-11-06T22:30:43.274613",
+      "type": "action.state",
+      "actor": "worker-1",
+      "org_id": 1,
+      "payload": {
+        "seq": 2,
+        "action_type": "crm.create_organization",
+        "from": "VERIFYING",
+        "to": "VERIFIED",
+        "note": "effect confirmed"
+      },
+      "prev_hash": "a413eb4d9ad76bff9c0d045293888e4e4a3d6d51716ae23d3aacfbb4e755de99",
+      "hash": "f73e70eef4065bd59eab6d6cba197bebbf91aa32e0972e24ed6962d785eef8b5"
+    },
+    {
+      "seq": 18,
+      "ts": "2026-11-06T22:30:43.279672",
+      "type": "action.claimed",
+      "actor": "worker-1",
+      "org_id": 1,
+      "payload": {
+        "seq": 3,
+        "worker": "worker-1"
+      },
+      "prev_hash": "f73e70eef4065bd59eab6d6cba197bebbf91aa32e0972e24ed6962d785eef8b5",
+      "hash": "152a9e3740deac4e7276ab8c3ca70bcc58e1cdcdc4c5a5b227695daa6e83608f"
+    },
+    {
+      "seq": 19,
+      "ts": "2026-11-06T22:30:43.282768",
+      "type": "action.state",
+      "actor": "worker-1",
+      "org_id": 1,
+      "payload": {
+        "seq": 3,
+        "action_type": "***REDACTED***",
+        "from": "CLAIMED",
+        "to": "EXECUTING",
+        "note": "attempt 1"
+      },
+      "prev_hash": "152a9e3740deac4e7276ab8c3ca70bcc58e1cdcdc4c5a5b227695daa6e83608f",
+      "hash": "49dbb198a0a1edd1110d8e10b613865d8a7e8eacab59acc79e8afd8df785eeb0"
+    },
+    {
+      "seq": 20,
+      "ts": "2026-11-06T22:30:43.287400",
+      "type": "action.state",
+      "actor": "worker-1",
+      "org_id": 1,
+      "payload": {
+        "seq": 3,
+        "action_type": "***REDACTED***",
+        "from": "EXECUTING",
+        "to": "SUCCEEDED",
+        "note": "effect applied"
+      },
+      "prev_hash": "49dbb198a0a1edd1110d8e10b613865d8a7e8eacab59acc79e8afd8df785eeb0",
+      "hash": "3bb306610b2366f8c2329f960a4f94b2cf4afb0d639f45004bf4739e120a5b7a"
+    },
+    {
+      "seq": 21,
+      "ts": "2026-11-06T22:30:43.289047",
+      "type": "action.state",
+      "actor": "worker-1",
+      "org_id": 1,
+      "payload": {
+        "seq": 3,
+        "action_type": "***REDACTED***",
+        "from": "SUCCEEDED",
+        "to": "VERIFYING",
+        "note": "checking effect"
+      },
+      "prev_hash": "3bb306610b2366f8c2329f960a4f94b2cf4afb0d639f45004bf4739e120a5b7a",
+      "hash": "7a7d70ac0404aad2b4e93389835793d91a0184768e31dcb7c4dbf3ba37976c01"
+    },
+    {
+      "seq": 22,
+      "ts": "2026-11-06T22:30:43.290835",
+      "type": "action.state",
+      "actor": "worker-1",
+      "org_id": 1,
+      "payload": {
+        "seq": 3,
+        "action_type": "***REDACTED***",
+        "from": "VERIFYING",
+        "to": "VERIFIED",
+        "note": "effect confirmed"
+      },
+      "prev_hash": "7a7d70ac0404aad2b4e93389835793d91a0184768e31dcb7c4dbf3ba37976c01",
+      "hash": "8a62804310f2c809d4c644d443c87bd05631b317bbf60dc1204a0458f3da8d41"
+    },
+    {
+      "seq": 23,
+      "ts": "2026-11-06T22:30:43.296419",
+      "type": "action.claimed",
+      "actor": "worker-1",
+      "org_id": 1,
+      "payload": {
+        "seq": 4,
+        "worker": "worker-1"
+      },
+      "prev_hash": "8a62804310f2c809d4c644d443c87bd05631b317bbf60dc1204a0458f3da8d41",
+      "hash": "4b09e77f7b4cf0957738d627442a066d6a1a3994866dd56fc442aadde1f63783"
+    },
+    {
+      "seq": 24,
+      "ts": "2026-11-06T22:30:43.300367",
+      "type": "action.state",
+      "actor": "worker-1",
+      "org_id": 1,
+      "payload": {
+        "seq": 4,
+        "action_type": "***REDACTED***",
+        "from": "CLAIMED",
+        "to": "EXECUTING",
+        "note": "attempt 1"
+      },
+      "prev_hash": "4b09e77f7b4cf0957738d627442a066d6a1a3994866dd56fc442aadde1f63783",
+      "hash": "c4637f34f38102206704781cc40d1f6afbdd99dc5582a3e287adb36e9cd4242e"
+    },
+    {
+      "seq": 25,
+      "ts": "2026-11-06T22:30:43.324922",
+      "type": "action.state",
+      "actor": "worker-1",
+      "org_id": 1,
+      "payload": {
+        "seq": 4,
+        "action_type": "***REDACTED***",
+        "from": "EXECUTING",
+        "to": "SUCCEEDED",
+        "note": "effect applied"
+      },
+      "prev_hash": "c4637f34f38102206704781cc40d1f6afbdd99dc5582a3e287adb36e9cd4242e",
+      "hash": "21135ed00eee26043b630bc00f3cf1f165341ef70028b9cc382c4f42b0ba46a8"
+    },
+    {
+      "seq": 26,
+      "ts": "2026-11-06T22:30:43.327077",
+      "type": "action.state",
+      "actor": "worker-1",
+      "org_id": 1,
+      "payload": {
+        "seq": 4,
+        "action_type": "***REDACTED***",
+        "from": "SUCCEEDED",
+        "to": "VERIFYING",
+        "note": "checking effect"
+      },
+      "prev_hash": "21135ed00eee26043b630bc00f3cf1f165341ef70028b9cc382c4f42b0ba46a8",
+      "hash": "17a6f8c228be7f52a0f98191c30eb0ebb67330471a4a60c49090f78882a1c931"
+    },
+    {
+      "seq": 27,
+      "ts": "2026-11-06T22:30:43.333469",
+      "type": "action.state",
+      "actor": "worker-1",
+      "org_id": 1,
+      "payload": {
+        "seq": 4,
+        "action_type": "***REDACTED***",
+        "from": "VERIFYING",
+        "to": "VERIFIED",
+        "note": "effect confirmed"
+      },
+      "prev_hash": "17a6f8c228be7f52a0f98191c30eb0ebb67330471a4a60c49090f78882a1c931",
+      "hash": "e72bcecb9983b6d04a9e7097ea057c0aa8eef3b4803fac511022ba45b69d599a"
+    },
+    {
+      "seq": 28,
+      "ts": "2026-11-06T22:30:43.350137",
+      "type": "action.claimed",
+      "actor": "worker-1",
+      "org_id": 1,
+      "payload": {
+        "seq": 5,
+        "worker": "worker-1"
+      },
+      "prev_hash": "e72bcecb9983b6d04a9e7097ea057c0aa8eef3b4803fac511022ba45b69d599a",
+      "hash": "5dfaa62a74118654ba9a94bb81feaf6c0644ab4debc82b1b70b4f509d51ba102"
+    },
+    {
+      "seq": 29,
+      "ts": "2026-11-06T22:30:43.351812",
+      "type": "action.state",
+      "actor": "worker-1",
+      "org_id": 1,
+      "payload": {
+        "seq": 5,
+        "action_type": "support.create_queue",
+        "from": "CLAIMED",
+        "to": "EXECUTING",
+        "note": "attempt 1"
+      },
+      "prev_hash": "5dfaa62a74118654ba9a94bb81feaf6c0644ab4debc82b1b70b4f509d51ba102",
+      "hash": "8f9e3875d5fdb6acaafab1415b81231123096806d91d5f1fe40822bfc4acff51"
+    },
+    {
+      "seq": 30,
+      "ts": "2026-11-06T22:30:43.359189",
+      "type": "action.state",
+      "actor": "worker-1",
+      "org_id": 1,
+      "payload": {
+        "seq": 5,
+        "action_type": "support.create_queue",
+        "from": "EXECUTING",
+        "to": "SUCCEEDED",
+        "note": "effect applied"
+      },
+      "prev_hash": "8f9e3875d5fdb6acaafab1415b81231123096806d91d5f1fe40822bfc4acff51",
+      "hash": "253234d72340064b5acd9efc8814bbf0c2457feccfef0bb7e7cc9958a6a90041"
+    },
+    {
+      "seq": 31,
+      "ts": "2026-11-06T22:30:43.363203",
+      "type": "action.state",
+      "actor": "worker-1",
+      "org_id": 1,
+      "payload": {
+        "seq": 5,
+        "action_type": "support.create_queue",
+        "from": "SUCCEEDED",
+        "to": "VERIFYING",
+        "note": "checking effect"
+      },
+      "prev_hash": "253234d72340064b5acd9efc8814bbf0c2457feccfef0bb7e7cc9958a6a90041",
+      "hash": "2b9e8ed17d74296024150d2eb462ad7d16db7359ec2c956bc348a3eac0a7bbbe"
+    },
+    {
+      "seq": 32,
+      "ts": "2026-11-06T22:30:43.366020",
+      "type": "action.state",
+      "actor": "worker-1",
+      "org_id": 1,
+      "payload": {
+        "seq": 5,
+        "action_type": "support.create_queue",
+        "from": "VERIFYING",
+        "to": "VERIFIED",
+        "note": "effect confirmed"
+      },
+      "prev_hash": "2b9e8ed17d74296024150d2eb462ad7d16db7359ec2c956bc348a3eac0a7bbbe",
+      "hash": "d49f94185b850cdec2f0b13cc540cd5a9a7dcfa483d764c30371199768a09b5b"
+    },
+    {
+      "seq": 33,
+      "ts": "2026-11-06T22:30:43.376357",
+      "type": "action.claimed",
+      "actor": "worker-1",
+      "org_id": 1,
+      "payload": {
+        "seq": 6,
+        "worker": "worker-1"
+      },
+      "prev_hash": "d49f94185b850cdec2f0b13cc540cd5a9a7dcfa483d764c30371199768a09b5b",
+      "hash": "0fcbc4e351287b4777e23e1ab4a36b0e8abe500403b76d08b6f9210a65af5b94"
+    },
+    {
+      "seq": 34,
+      "ts": "2026-11-06T22:30:43.384096",
+      "type": "action.state",
+      "actor": "worker-1",
+      "org_id": 1,
+      "payload": {
+        "seq": 6,
+        "action_type": "billing.create_profile",
+        "from": "CLAIMED",
+        "to": "EXECUTING",
+        "note": "attempt 1"
+      },
+      "prev_hash": "0fcbc4e351287b4777e23e1ab4a36b0e8abe500403b76d08b6f9210a65af5b94",
+      "hash": "3a334df2753f959b2871bbb3c1d4c637aa6ef560ff0a683f8a6abe3d7dcf6188"
+    },
+    {
+      "seq": 35,
+      "ts": "2026-11-06T22:30:43.388083",
+      "type": "chaos.injected",
+      "actor": "worker-1",
+      "org_id": 1,
+      "payload": {
+        "seq": 6,
+        "connector": "demo-billing",
+        "action_type": "billing.create_profile",
+        "fault": "http500"
+      },
+      "prev_hash": "3a334df2753f959b2871bbb3c1d4c637aa6ef560ff0a683f8a6abe3d7dcf6188",
+      "hash": "d4f4dc1bd741d6e178051f8e787f0eb1d542dddd05274fb6182ce1b8e7bafdff"
+    },
+    {
+      "seq": 36,
+      "ts": "2026-11-06T22:30:43.391548",
+      "type": "action.state",
+      "actor": "worker-1",
+      "org_id": 1,
+      "payload": {
+        "seq": 6,
+        "action_type": "billing.create_profile",
+        "from": "EXECUTING",
+        "to": "FAILED",
+        "note": "CHAOS_HTTP500: chaos: demo-billing/billing.create_profile 500"
+      },
+      "prev_hash": "d4f4dc1bd741d6e178051f8e787f0eb1d542dddd05274fb6182ce1b8e7bafdff",
+      "hash": "9c91f39aecfe86c81d831e7140a141d58b68d2721d30e96c4f39dbfff4af2881"
+    },
+    {
+      "seq": 37,
+      "ts": "2026-11-06T22:30:43.392897",
+      "type": "action.state",
+      "actor": "worker-1",
+      "org_id": 1,
+      "payload": {
+        "seq": 6,
+        "action_type": "billing.create_profile",
+        "from": "FAILED",
+        "to": "RETRY_SCHEDULED",
+        "note": "attempt 1/2"
+      },
+      "prev_hash": "9c91f39aecfe86c81d831e7140a141d58b68d2721d30e96c4f39dbfff4af2881",
+      "hash": "6c3ef4f07268d3c96e8dd2ee183f9d14307ab3ca817efd643fa6161f5fd7e1b0"
+    },
+    {
+      "seq": 38,
+      "ts": "2026-11-06T22:30:43.393832",
+      "type": "workflow.state",
+      "actor": "worker-1",
+      "org_id": 1,
+      "payload": {
+        "from": "RUNNING",
+        "to": "RETRYING",
+        "note": "retry scheduled"
+      },
+      "prev_hash": "6c3ef4f07268d3c96e8dd2ee183f9d14307ab3ca817efd643fa6161f5fd7e1b0",
+      "hash": "3ae4999f432711b09a79b1e61d0d7787cd49168890fe4e37c0f48d58ee128221"
+    },
+    {
+      "seq": 39,
+      "ts": "2026-11-06T22:30:43.399013",
+      "type": "workflow.state",
+      "actor": "worker-1",
+      "org_id": 1,
+      "payload": {
+        "from": "RETRYING",
+        "to": "RUNNING",
+        "note": "forward progress"
+      },
+      "prev_hash": "3ae4999f432711b09a79b1e61d0d7787cd49168890fe4e37c0f48d58ee128221",
+      "hash": "11231b3f7df6646537513e2381cb0e98f38cab333a00ed770162c018d6d0e88e"
+    },
+    {
+      "seq": 40,
+      "ts": "2026-11-06T22:30:43.404629",
+      "type": "action.claimed",
+      "actor": "worker-1",
+      "org_id": 1,
+      "payload": {
+        "seq": 7,
+        "worker": "worker-1"
+      },
+      "prev_hash": "11231b3f7df6646537513e2381cb0e98f38cab333a00ed770162c018d6d0e88e",
+      "hash": "659d1b2bd209424ffe83cf85c547eebf3750b8771dcebed3cccd151c40d899ea"
+    },
+    {
+      "seq": 41,
+      "ts": "2026-11-06T22:30:43.406616",
+      "type": "action.state",
+      "actor": "worker-1",
+      "org_id": 1,
+      "payload": {
+        "seq": 7,
+        "action_type": "identity.assign_manager",
+        "from": "CLAIMED",
+        "to": "EXECUTING",
+        "note": "attempt 1"
+      },
+      "prev_hash": "659d1b2bd209424ffe83cf85c547eebf3750b8771dcebed3cccd151c40d899ea",
+      "hash": "05ac4c37ce19f41ae86287327def2236c58df7dd2171b3242249060618651039"
+    },
+    {
+      "seq": 42,
+      "ts": "2026-11-06T22:30:43.412804",
+      "type": "action.state",
+      "actor": "worker-1",
+      "org_id": 1,
+      "payload": {
+        "seq": 7,
+        "action_type": "identity.assign_manager",
+        "from": "EXECUTING",
+        "to": "SUCCEEDED",
+        "note": "effect applied"
+      },
+      "prev_hash": "05ac4c37ce19f41ae86287327def2236c58df7dd2171b3242249060618651039",
+      "hash": "c7ea3a65ab54248cf6fbe483293795e4d86ef403daf26fb155bd851f9e73fe31"
+    },
+    {
+      "seq": 43,
+      "ts": "2026-11-06T22:30:43.414934",
+      "type": "action.state",
+      "actor": "worker-1",
+      "org_id": 1,
+      "payload": {
+        "seq": 7,
+        "action_type": "identity.assign_manager",
+        "from": "SUCCEEDED",
+        "to": "VERIFYING",
+        "note": "checking effect"
+      },
+      "prev_hash": "c7ea3a65ab54248cf6fbe483293795e4d86ef403daf26fb155bd851f9e73fe31",
+      "hash": "803e028d0ba77b2b8379f373b361921b8161b48f25b56fc515ae1992cf1fec74"
+    },
+    {
+      "seq": 44,
+      "ts": "2026-11-06T22:30:43.417692",
+      "type": "action.state",
+      "actor": "worker-1",
+      "org_id": 1,
+      "payload": {
+        "seq": 7,
+        "action_type": "identity.assign_manager",
+        "from": "VERIFYING",
+        "to": "VERIFIED",
+        "note": "effect confirmed"
+      },
+      "prev_hash": "803e028d0ba77b2b8379f373b361921b8161b48f25b56fc515ae1992cf1fec74",
+      "hash": "f83f74d55f525b7c96d31095a9af1fa361d69a74b712cc926e80aee4461b8ab6"
+    },
+    {
+      "seq": 45,
+      "ts": "2026-11-06T22:30:43.423787",
+      "type": "action.claimed",
+      "actor": "worker-1",
+      "org_id": 1,
+      "payload": {
+        "seq": 8,
+        "worker": "worker-1"
+      },
+      "prev_hash": "f83f74d55f525b7c96d31095a9af1fa361d69a74b712cc926e80aee4461b8ab6",
+      "hash": "bcbc55d313e39ab81c9df1819236bda4b97e359e4981a4897ef20cf941e18f55"
+    },
+    {
+      "seq": 46,
+      "ts": "2026-11-06T22:30:43.426017",
+      "type": "action.state",
+      "actor": "worker-1",
+      "org_id": 1,
+      "payload": {
+        "seq": 8,
+        "action_type": "***REDACTED***",
+        "from": "CLAIMED",
+        "to": "EXECUTING",
+        "note": "attempt 1"
+      },
+      "prev_hash": "bcbc55d313e39ab81c9df1819236bda4b97e359e4981a4897ef20cf941e18f55",
+      "hash": "10d9210c99469cdfd1864d1850bef1efe8826228b363defbf148d11767ba8ce1"
+    },
+    {
+      "seq": 47,
+      "ts": "2026-11-06T22:30:43.431792",
+      "type": "action.state",
+      "actor": "worker-1",
+      "org_id": 1,
+      "payload": {
+        "seq": 8,
+        "action_type": "***REDACTED***",
+        "from": "EXECUTING",
+        "to": "SUCCEEDED",
+        "note": "effect applied"
+      },
+      "prev_hash": "10d9210c99469cdfd1864d1850bef1efe8826228b363defbf148d11767ba8ce1",
+      "hash": "7b4fe30058c2a2df72203183dd530d196a30993a10677ab042067cb7bba24c3c"
+    },
+    {
+      "seq": 48,
+      "ts": "2026-11-06T22:30:43.433791",
+      "type": "action.state",
+      "actor": "worker-1",
+      "org_id": 1,
+      "payload": {
+        "seq": 8,
+        "action_type": "***REDACTED***",
+        "from": "SUCCEEDED",
+        "to": "VERIFYING",
+        "note": "checking effect"
+      },
+      "prev_hash": "7b4fe30058c2a2df72203183dd530d196a30993a10677ab042067cb7bba24c3c",
+      "hash": "ef16d2fba14e57ff69f0df4c5e9d6cf14395e3c89ce8628f3f304a4dedbbf077"
+    },
+    {
+      "seq": 49,
+      "ts": "2026-11-06T22:30:43.436588",
+      "type": "action.state",
+      "actor": "worker-1",
+      "org_id": 1,
+      "payload": {
+        "seq": 8,
+        "action_type": "***REDACTED***",
+        "from": "VERIFYING",
+        "to": "VERIFIED",
+        "note": "effect confirmed"
+      },
+      "prev_hash": "ef16d2fba14e57ff69f0df4c5e9d6cf14395e3c89ce8628f3f304a4dedbbf077",
+      "hash": "5e18be5997c6b26b08b73eea991dda935a8a6cac5083916e804635f04d4d150c"
+    },
+    {
+      "seq": 50,
+      "ts": "2026-11-06T22:30:43.441065",
+      "type": "action.retry_wait",
+      "actor": "worker-1",
+      "org_id": 1,
+      "payload": {
+        "seq": 6,
+        "wait_s": 1.12
+      },
+      "prev_hash": "5e18be5997c6b26b08b73eea991dda935a8a6cac5083916e804635f04d4d150c",
+      "hash": "757d40d216b88487b814a9ea0b1109d7fc4d8d394400214e06190141559c5738"
+    },
+    {
+      "seq": 51,
+      "ts": "2026-11-06T22:30:44.565290",
+      "type": "action.state",
+      "actor": "worker-1",
+      "org_id": 1,
+      "payload": {
+        "seq": 6,
+        "action_type": "billing.create_profile",
+        "from": "RETRY_SCHEDULED",
+        "to": "PENDING",
+        "note": "retry due"
+      },
+      "prev_hash": "757d40d216b88487b814a9ea0b1109d7fc4d8d394400214e06190141559c5738",
+      "hash": "9bde08bf8a4785e2a5174a2ca03c9c064a3410779fa2e98f03e7abe995568eb4"
+    },
+    {
+      "seq": 52,
+      "ts": "2026-11-06T22:30:44.579466",
+      "type": "action.claimed",
+      "actor": "worker-1",
+      "org_id": 1,
+      "payload": {
+        "seq": 6,
+        "worker": "worker-1"
+      },
+      "prev_hash": "9bde08bf8a4785e2a5174a2ca03c9c064a3410779fa2e98f03e7abe995568eb4",
+      "hash": "f234c7c4e2043b8218a0afe8b297b5a608cc385b34fdc78ae388afe6f70964b6"
+    },
+    {
+      "seq": 53,
+      "ts": "2026-11-06T22:30:44.581801",
+      "type": "action.state",
+      "actor": "worker-1",
+      "org_id": 1,
+      "payload": {
+        "seq": 6,
+        "action_type": "billing.create_profile",
+        "from": "CLAIMED",
+        "to": "EXECUTING",
+        "note": "attempt 2"
+      },
+      "prev_hash": "f234c7c4e2043b8218a0afe8b297b5a608cc385b34fdc78ae388afe6f70964b6",
+      "hash": "e98ea0f7d054f1ac1d6db2e8f24e822bb04355a45fa039187b5ba0389c1ec4c6"
+    },
+    {
+      "seq": 54,
+      "ts": "2026-11-06T22:30:44.584034",
+      "type": "chaos.injected",
+      "actor": "worker-1",
+      "org_id": 1,
+      "payload": {
+        "seq": 6,
+        "connector": "demo-billing",
+        "action_type": "billing.create_profile",
+        "fault": "http500"
+      },
+      "prev_hash": "e98ea0f7d054f1ac1d6db2e8f24e822bb04355a45fa039187b5ba0389c1ec4c6",
+      "hash": "71036a33f6681ad855bb7d4f2dd53b62e99c9c4234c7c536f35e56211741a0ff"
+    },
+    {
+      "seq": 55,
+      "ts": "2026-11-06T22:30:44.584799",
+      "type": "action.state",
+      "actor": "worker-1",
+      "org_id": 1,
+      "payload": {
+        "seq": 6,
+        "action_type": "billing.create_profile",
+        "from": "EXECUTING",
+        "to": "FAILED",
+        "note": "CHAOS_HTTP500: chaos: demo-billing/billing.create_profile 500"
+      },
+      "prev_hash": "71036a33f6681ad855bb7d4f2dd53b62e99c9c4234c7c536f35e56211741a0ff",
+      "hash": "9133aa3f98c478de913134d4802477517c911ec3b88599f374d7a40383886be8"
+    },
+    {
+      "seq": 56,
+      "ts": "2026-11-06T22:30:44.587681",
+      "type": "workflow.state",
+      "actor": "worker-1",
+      "org_id": 1,
+      "payload": {
+        "from": "RUNNING",
+        "to": "COMPENSATING",
+        "note": "seq 6 billing.create_profile: CHAOS_HTTP500: chaos: demo-billing/billing.create_profile 500"
+      },
+      "prev_hash": "9133aa3f98c478de913134d4802477517c911ec3b88599f374d7a40383886be8",
+      "hash": "f5515b5f2e5dbfe2339663ee4bee89fb99f4a246bbc44c1b1f9d8c533087f63a"
+    },
+    {
+      "seq": 57,
+      "ts": "2026-11-06T22:30:44.588821",
+      "type": "action.state",
+      "actor": "worker-1",
+      "org_id": 1,
+      "payload": {
+        "seq": 1,
+        "action_type": "crm.validate_customer",
+        "from": "VERIFIED",
+        "to": "COMPENSATION_PENDING",
+        "note": "queued for compensation"
+      },
+      "prev_hash": "f5515b5f2e5dbfe2339663ee4bee89fb99f4a246bbc44c1b1f9d8c533087f63a",
+      "hash": "b0554a7b204f12abf4fff6cab935bdc8872fd7af58f0eb2a4e4dbb7ac1fed227"
+    },
+    {
+      "seq": 58,
+      "ts": "2026-11-06T22:30:44.589388",
+      "type": "action.state",
+      "actor": "worker-1",
+      "org_id": 1,
+      "payload": {
+        "seq": 2,
+        "action_type": "crm.create_organization",
+        "from": "VERIFIED",
+        "to": "COMPENSATION_PENDING",
+        "note": "queued for compensation"
+      },
+      "prev_hash": "b0554a7b204f12abf4fff6cab935bdc8872fd7af58f0eb2a4e4dbb7ac1fed227",
+      "hash": "410b0886dacc4cfa43529094fdc05a8ebed9774274a070d22fa1f04ee86c71ae"
+    },
+    {
+      "seq": 59,
+      "ts": "2026-11-06T22:30:44.589962",
+      "type": "action.state",
+      "actor": "worker-1",
+      "org_id": 1,
+      "payload": {
+        "seq": 3,
+        "action_type": "***REDACTED***",
+        "from": "VERIFIED",
+        "to": "COMPENSATION_PENDING",
+        "note": "queued for compensation"
+      },
+      "prev_hash": "410b0886dacc4cfa43529094fdc05a8ebed9774274a070d22fa1f04ee86c71ae",
+      "hash": "042d49385e6211884c37da7fc0302d6ecd06a2057b98a74f291b8612dcbfedd5"
+    },
+    {
+      "seq": 60,
+      "ts": "2026-11-06T22:30:44.590591",
+      "type": "action.state",
+      "actor": "worker-1",
+      "org_id": 1,
+      "payload": {
+        "seq": 4,
+        "action_type": "***REDACTED***",
+        "from": "VERIFIED",
+        "to": "COMPENSATION_PENDING",
+        "note": "queued for compensation"
+      },
+      "prev_hash": "042d49385e6211884c37da7fc0302d6ecd06a2057b98a74f291b8612dcbfedd5",
+      "hash": "e4fbcebd8e9509d69febd36659aeaf7ae4de92a26e4ea16361c8357ea3948c24"
+    },
+    {
+      "seq": 61,
+      "ts": "2026-11-06T22:30:44.591606",
+      "type": "action.state",
+      "actor": "worker-1",
+      "org_id": 1,
+      "payload": {
+        "seq": 5,
+        "action_type": "support.create_queue",
+        "from": "VERIFIED",
+        "to": "COMPENSATION_PENDING",
+        "note": "queued for compensation"
+      },
+      "prev_hash": "e4fbcebd8e9509d69febd36659aeaf7ae4de92a26e4ea16361c8357ea3948c24",
+      "hash": "019a17cc34dd57bb8c3d22fd49b58997ef612e99ffdd88b47a05650b74bd6736"
+    },
+    {
+      "seq": 62,
+      "ts": "2026-11-06T22:30:44.592485",
+      "type": "action.state",
+      "actor": "worker-1",
+      "org_id": 1,
+      "payload": {
+        "seq": 7,
+        "action_type": "identity.assign_manager",
+        "from": "VERIFIED",
+        "to": "COMPENSATION_PENDING",
+        "note": "queued for compensation"
+      },
+      "prev_hash": "019a17cc34dd57bb8c3d22fd49b58997ef612e99ffdd88b47a05650b74bd6736",
+      "hash": "869caa16b0f63281c81cfe5d2e0c7e5e0919a3401360f962cff277dfdaac8361"
+    },
+    {
+      "seq": 63,
+      "ts": "2026-11-06T22:30:44.593152",
+      "type": "action.state",
+      "actor": "worker-1",
+      "org_id": 1,
+      "payload": {
+        "seq": 8,
+        "action_type": "***REDACTED***",
+        "from": "VERIFIED",
+        "to": "COMPENSATION_PENDING",
+        "note": "queued for compensation"
+      },
+      "prev_hash": "869caa16b0f63281c81cfe5d2e0c7e5e0919a3401360f962cff277dfdaac8361",
+      "hash": "8d91aa2396f33e2e5a4debd3c4968008777283b673f1e5269c1466afe2071372"
+    },
+    {
+      "seq": 64,
+      "ts": "2026-11-06T22:30:44.593771",
+      "type": "action.state",
+      "actor": "worker-1",
+      "org_id": 1,
+      "payload": {
+        "seq": 9,
+        "action_type": "core.consistency_check",
+        "from": "PENDING",
+        "to": "SKIPPED",
+        "note": "dependent blocked by failure"
+      },
+      "prev_hash": "8d91aa2396f33e2e5a4debd3c4968008777283b673f1e5269c1466afe2071372",
+      "hash": "6205b835639f02129be9884812dc128f5115a1cd76184350201446ffffa0188f"
+    },
+    {
+      "seq": 65,
+      "ts": "2026-11-06T22:30:44.594308",
+      "type": "action.state",
+      "actor": "worker-1",
+      "org_id": 1,
+      "payload": {
+        "seq": 10,
+        "action_type": "notify.send_summary",
+        "from": "PENDING",
+        "to": "SKIPPED",
+        "note": "dependent blocked by failure"
+      },
+      "prev_hash": "6205b835639f02129be9884812dc128f5115a1cd76184350201446ffffa0188f",
+      "hash": "c16659781a5beaffacee8e491c5119bf669d2c9511e7bc77ed28fbe9a4a648a7"
+    },
+    {
+      "seq": 66,
+      "ts": "2026-11-06T22:30:44.594819",
+      "type": "compensation.started",
+      "actor": "worker-1",
+      "org_id": 1,
+      "payload": {
+        "reason": "seq 6 billing.create_profile: CHAOS_HTTP500: chaos: demo-billing/billing.create_profile 500",
+        "queued": 7,
+        "manual_items": 0
+      },
+      "prev_hash": "c16659781a5beaffacee8e491c5119bf669d2c9511e7bc77ed28fbe9a4a648a7",
+      "hash": "dcf2c33f6f99a45eec4915845aa67be507680cc5d95802326c8cb00316ea4d07"
+    },
+    {
+      "seq": 67,
+      "ts": "2026-11-06T22:30:44.599465",
+      "type": "action.state",
+      "actor": "worker-1",
+      "org_id": 1,
+      "payload": {
+        "seq": 8,
+        "action_type": "***REDACTED***",
+        "from": "COMPENSATION_PENDING",
+        "to": "COMPENSATING",
+        "note": "compensating"
+      },
+      "prev_hash": "dcf2c33f6f99a45eec4915845aa67be507680cc5d95802326c8cb00316ea4d07",
+      "hash": "8aec42380fbd0a8d3492b198d4e605700a5f2969262038818d33dbb891d2c6e3"
+    },
+    {
+      "seq": 68,
+      "ts": "2026-11-06T22:30:44.603413",
+      "type": "action.state",
+      "actor": "worker-1",
+      "org_id": 1,
+      "payload": {
+        "seq": 8,
+        "action_type": "***REDACTED***",
+        "from": "COMPENSATING",
+        "to": "COMPENSATED",
+        "note": "effect undone+verified"
+      },
+      "prev_hash": "8aec42380fbd0a8d3492b198d4e605700a5f2969262038818d33dbb891d2c6e3",
+      "hash": "ebc26d6b7fdcbf06b684ab3f23ab051173fb5f11ac66310aeb52d3f1e1515800"
+    },
+    {
+      "seq": 69,
+      "ts": "2026-11-06T22:30:44.606005",
+      "type": "action.state",
+      "actor": "worker-1",
+      "org_id": 1,
+      "payload": {
+        "seq": 7,
+        "action_type": "identity.assign_manager",
+        "from": "COMPENSATION_PENDING",
+        "to": "COMPENSATING",
+        "note": "compensating"
+      },
+      "prev_hash": "ebc26d6b7fdcbf06b684ab3f23ab051173fb5f11ac66310aeb52d3f1e1515800",
+      "hash": "217acc41a272eee249a9df8415454cb5ba47a2c5e0422f9abda07655cf8ad2b7"
+    },
+    {
+      "seq": 70,
+      "ts": "2026-11-06T22:30:44.610630",
+      "type": "action.state",
+      "actor": "worker-1",
+      "org_id": 1,
+      "payload": {
+        "seq": 7,
+        "action_type": "identity.assign_manager",
+        "from": "COMPENSATING",
+        "to": "COMPENSATED",
+        "note": "effect undone+verified"
+      },
+      "prev_hash": "217acc41a272eee249a9df8415454cb5ba47a2c5e0422f9abda07655cf8ad2b7",
+      "hash": "6278af4163c23fc046bf1441ecc5314fd2c329b5a63dbf638882216cf3b5a9d7"
+    },
+    {
+      "seq": 71,
+      "ts": "2026-11-06T22:30:44.613677",
+      "type": "action.state",
+      "actor": "worker-1",
+      "org_id": 1,
+      "payload": {
+        "seq": 5,
+        "action_type": "support.create_queue",
+        "from": "COMPENSATION_PENDING",
+        "to": "COMPENSATING",
+        "note": "compensating"
+      },
+      "prev_hash": "6278af4163c23fc046bf1441ecc5314fd2c329b5a63dbf638882216cf3b5a9d7",
+      "hash": "41bc1939ca3b5cd464e4467a4df5ea169b6d10cbe693bfac7a5f4cb738705e0b"
+    },
+    {
+      "seq": 72,
+      "ts": "2026-11-06T22:30:44.617592",
+      "type": "action.state",
+      "actor": "worker-1",
+      "org_id": 1,
+      "payload": {
+        "seq": 5,
+        "action_type": "support.create_queue",
+        "from": "COMPENSATING",
+        "to": "COMPENSATED",
+        "note": "effect undone+verified"
+      },
+      "prev_hash": "41bc1939ca3b5cd464e4467a4df5ea169b6d10cbe693bfac7a5f4cb738705e0b",
+      "hash": "e5a56273206471c7ff1f19d54e7116e64f3293f95c2ab2d9d5e82ce4d9686b7c"
+    },
+    {
+      "seq": 73,
+      "ts": "2026-11-06T22:30:44.620635",
+      "type": "action.state",
+      "actor": "worker-1",
+      "org_id": 1,
+      "payload": {
+        "seq": 4,
+        "action_type": "***REDACTED***",
+        "from": "COMPENSATION_PENDING",
+        "to": "COMPENSATING",
+        "note": "compensating"
+      },
+      "prev_hash": "e5a56273206471c7ff1f19d54e7116e64f3293f95c2ab2d9d5e82ce4d9686b7c",
+      "hash": "5bd959a8cd3f70ed20ae0af2804fff7528e7298c8cf57a777f02d44a2135b12d"
+    },
+    {
+      "seq": 74,
+      "ts": "2026-11-06T22:30:44.630613",
+      "type": "action.state",
+      "actor": "worker-1",
+      "org_id": 1,
+      "payload": {
+        "seq": 4,
+        "action_type": "***REDACTED***",
+        "from": "COMPENSATING",
+        "to": "COMPENSATED",
+        "note": "effect undone+verified"
+      },
+      "prev_hash": "5bd959a8cd3f70ed20ae0af2804fff7528e7298c8cf57a777f02d44a2135b12d",
+      "hash": "ac66ba0c56253d352dc67c5ac604612428d4ca537693f165a9bd472dc7f0a770"
+    },
+    {
+      "seq": 75,
+      "ts": "2026-11-06T22:30:44.634041",
+      "type": "action.state",
+      "actor": "worker-1",
+      "org_id": 1,
+      "payload": {
+        "seq": 3,
+        "action_type": "***REDACTED***",
+        "from": "COMPENSATION_PENDING",
+        "to": "COMPENSATING",
+        "note": "compensating"
+      },
+      "prev_hash": "ac66ba0c56253d352dc67c5ac604612428d4ca537693f165a9bd472dc7f0a770",
+      "hash": "3b4791b259e6aedbb3d9848cc9796f98b6feebe1c54ab06ed37474e39e2dae33"
+    },
+    {
+      "seq": 76,
+      "ts": "2026-11-06T22:30:44.637794",
+      "type": "action.state",
+      "actor": "worker-1",
+      "org_id": 1,
+      "payload": {
+        "seq": 3,
+        "action_type": "***REDACTED***",
+        "from": "COMPENSATING",
+        "to": "COMPENSATED",
+        "note": "effect undone+verified"
+      },
+      "prev_hash": "3b4791b259e6aedbb3d9848cc9796f98b6feebe1c54ab06ed37474e39e2dae33",
+      "hash": "10d977a6ea84e59a2a66ad84b0e4f433127d7cdbc07ced14532fbb320ea06a99"
+    },
+    {
+      "seq": 77,
+      "ts": "2026-11-06T22:30:44.640308",
+      "type": "action.state",
+      "actor": "worker-1",
+      "org_id": 1,
+      "payload": {
+        "seq": 2,
+        "action_type": "crm.create_organization",
+        "from": "COMPENSATION_PENDING",
+        "to": "COMPENSATING",
+        "note": "compensating"
+      },
+      "prev_hash": "10d977a6ea84e59a2a66ad84b0e4f433127d7cdbc07ced14532fbb320ea06a99",
+      "hash": "32b309977750bb80ebc7d60b382bc98d40c1401edd7cfeab390df20d13e1524a"
+    },
+    {
+      "seq": 78,
+      "ts": "2026-11-06T22:30:44.644388",
+      "type": "action.state",
+      "actor": "worker-1",
+      "org_id": 1,
+      "payload": {
+        "seq": 2,
+        "action_type": "crm.create_organization",
+        "from": "COMPENSATING",
+        "to": "COMPENSATED",
+        "note": "effect undone+verified"
+      },
+      "prev_hash": "32b309977750bb80ebc7d60b382bc98d40c1401edd7cfeab390df20d13e1524a",
+      "hash": "bd8a7e271dc0a8cb521fbc2c297a18b1c987b3585075a6096f14fbad2ea619cf"
+    },
+    {
+      "seq": 79,
+      "ts": "2026-11-06T22:30:44.646695",
+      "type": "action.state",
+      "actor": "worker-1",
+      "org_id": 1,
+      "payload": {
+        "seq": 1,
+        "action_type": "crm.validate_customer",
+        "from": "COMPENSATION_PENDING",
+        "to": "COMPENSATING",
+        "note": "compensating"
+      },
+      "prev_hash": "bd8a7e271dc0a8cb521fbc2c297a18b1c987b3585075a6096f14fbad2ea619cf",
+      "hash": "14d53343373027579e57c0354c3c324f21d56398cd0f585c6acda8cc8944a37c"
+    },
+    {
+      "seq": 80,
+      "ts": "2026-11-06T22:30:44.648347",
+      "type": "action.state",
+      "actor": "worker-1",
+      "org_id": 1,
+      "payload": {
+        "seq": 1,
+        "action_type": "crm.validate_customer",
+        "from": "COMPENSATING",
+        "to": "COMPENSATED",
+        "note": "noop (read-only)"
+      },
+      "prev_hash": "14d53343373027579e57c0354c3c324f21d56398cd0f585c6acda8cc8944a37c",
+      "hash": "669e6bef26829366642b50fdf2f950f72651d9d78b9e81edb6859a63207d63a1"
+    },
+    {
+      "seq": 81,
+      "ts": "2026-11-06T22:30:44.650546",
+      "type": "workflow.state",
+      "actor": "worker-1",
+      "org_id": 1,
+      "payload": {
+        "from": "COMPENSATING",
+        "to": "COMPENSATED",
+        "note": "all effects undone+verified"
+      },
+      "prev_hash": "669e6bef26829366642b50fdf2f950f72651d9d78b9e81edb6859a63207d63a1",
+      "hash": "98060aea5a57a61bf089745e599d5abfb831a1a5e2fb09a132f3edceda1203f4"
+    }
+  ],
+  "approvals": [
+    {
+      "plan_version": 1,
+      "status": "APPROVED",
+      "requested_by": "token:demo",
+      "decided_by": "token:demo"
+    }
+  ],
+  "chain": {
+    "valid": true,
+    "bad_seq": 0,
+    "message": "chain valid (81 events)"
+  },
+  "limits": [
+    "Hash chain detects tampering; not absolute immutability alone.",
+    "Secrets are redacted at append time and re-redacted on export."
+  ],
+  "redactions": []
+}

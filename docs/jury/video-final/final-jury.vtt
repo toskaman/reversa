@@ -1,0 +1,221 @@
+WEBVTT
+
+00:00:00.775 --> 00:00:04.223
+Your automation just finished
+half of a customer onboarding.
+
+00:00:04.263 --> 00:00:05.747
+Then billing failed.
+
+00:00:05.787 --> 00:00:07.775
+So who puts everything else back?
+
+00:00:09.800 --> 00:00:12.685
+One business workflow
+can touch five systems:
+
+00:00:12.725 --> 00:00:16.910
+CRM, identity, support,
+billing and notifications.
+
+00:00:16.950 --> 00:00:21.435
+When step six fails, every step that
+already ran has changed something.
+
+00:00:21.475 --> 00:00:26.675
+Someone has to find out what changed, what
+is safe to undo, and prove where it ended.
+
+00:00:28.375 --> 00:00:29.772
+This is REVERSA.
+
+00:00:29.812 --> 00:00:32.898
+A recovery control
+plane for AI operations.
+
+00:00:32.938 --> 00:00:36.275
+Reversible where possible.
+Accountable everywhere.
+
+00:00:38.350 --> 00:00:41.310
+What you are about to see
+is the real application.
+
+00:00:41.350 --> 00:00:43.948
+First, live on our Vultr deployment.
+
+00:00:43.988 --> 00:00:46.023
+A visitor clicks Start demo.
+
+00:00:46.063 --> 00:00:50.660
+REVERSA opens an isolated demo
+session, plans a 10-step onboarding,
+
+00:00:50.700 --> 00:00:54.625
+approves it, and executes
+it across five demo systems.
+
+00:00:56.850 --> 00:01:00.060
+Plans can come from Vultr
+Serverless Inference.
+
+00:01:00.100 --> 00:01:05.310
+Here, a plain English request goes to the
+model, and the draft comes back as a structured
+
+00:01:05.350 --> 00:01:08.398
+plan. But the model only proposes.
+
+00:01:08.438 --> 00:01:13.585
+A deterministic policy gate checks
+every capability, dependency and risk,
+
+00:01:13.625 --> 00:01:17.300
+and the provenance shows exactly
+which planner produced the plan.
+
+00:01:19.850 --> 00:01:23.660
+Before anything runs, REVERSA
+shows what each step will change,
+
+00:01:23.700 --> 00:01:27.347
+whether it can be reversed, and
+where a person must approve.
+
+00:01:27.387 --> 00:01:32.360
+The notification at the end cannot be
+unsent, so it is flagged as irreversible,
+
+00:01:32.400 --> 00:01:33.750
+in plain sight.
+
+00:01:35.875 --> 00:01:37.272
+Then it executes.
+
+00:01:37.312 --> 00:01:41.935
+Each step calls a connector, and REVERSA
+reads the system back to confirm the effect
+
+00:01:41.975 --> 00:01:48.023
+really exists. A green check means verified
+state, not just a successful response.
+
+00:01:48.063 --> 00:01:51.850
+10 steps, 10 verified, 59 events recorded.
+
+00:01:53.925 --> 00:01:55.647
+Now we break it on purpose.
+
+00:01:55.687 --> 00:01:58.872
+In the demo tenant, billing
+starts returning errors.
+
+00:01:58.912 --> 00:02:01.822
+After a bounded retry, step six fails.
+
+00:02:01.862 --> 00:02:05.910
+REVERSA blocks the two steps that depend
+on it, and compensates the completed work
+
+00:02:05.950 --> 00:02:07.372
+in reverse order.
+
+00:02:07.412 --> 00:02:11.397
+Seven compensation steps, one
+of them a read-only no-op.
+
+00:02:11.437 --> 00:02:15.785
+Then the Recovery Proof Engine checks
+every effect again. The verdict:
+
+00:02:15.825 --> 00:02:17.975
+verified with compensation.
+
+00:02:20.900 --> 00:02:22.797
+Don't trust a success message.
+
+00:02:22.837 --> 00:02:25.498
+Every run produces an Evidence Passport:
+
+00:02:25.538 --> 00:02:30.610
+a hash-chained record of the plan, the
+approval, every action and every reversal
+
+00:02:30.650 --> 00:02:33.998
+. Export it, and anyone
+can verify it offline.
+
+00:02:34.038 --> 00:02:35.697
+Eighty one events, valid.
+
+00:02:35.737 --> 00:02:39.850
+Anchor the count and the head hash,
+and truncation is ruled out too.
+
+00:02:42.375 --> 00:02:46.922
+The whole platform runs on one Vultr
+cloud compute instance in Paris.
+
+00:02:46.962 --> 00:02:53.310
+The Next.js console, the FastAPI workflow
+engine, Postgres, and five isolated demo
+
+00:02:53.350 --> 00:02:56.435
+stores, behind automatic TLS.
+
+00:02:56.475 --> 00:03:00.125
+Vultr Serverless Inference
+is the optional AI planner.
+
+00:03:02.375 --> 00:03:07.085
+For IT operations and business systems teams,
+the expensive part of a failed automation
+
+00:03:07.125 --> 00:03:08.485
+is not the failure.
+
+00:03:08.525 --> 00:03:12.722
+It is the investigation, the manual
+repair, and proving the final state.
+
+00:03:12.762 --> 00:03:15.385
+Workflow engines can retry and roll back.
+
+00:03:15.425 --> 00:03:18.160
+They do not prove what each
+system looks like afterwards.
+
+00:03:18.200 --> 00:03:23.235
+The first offer is a 30-day recovery
+audit, sandbox-only, with success criteria
+
+00:03:23.275 --> 00:03:27.060
+agreed up front, then a platform
+fee plus execution volume.
+
+00:03:27.100 --> 00:03:28.423
+No customers yet.
+
+00:03:28.463 --> 00:03:30.575
+That pilot is how we earn them.
+
+00:03:32.355 --> 00:03:36.352
+Typed compensation.
+Verification after every effect.
+
+00:03:36.392 --> 00:03:38.878
+Uncertain outcomes kept uncertain.
+
+00:03:38.918 --> 00:03:41.915
+AI planning separated from authorization.
+
+00:03:41.955 --> 00:03:43.978
+And evidence anyone can check.
+
+00:03:44.018 --> 00:03:45.655
+One control layer.
+
+00:03:47.855 --> 00:03:51.955
+REVERSA. Reversible where
+possible. Accountable everywhere.
+

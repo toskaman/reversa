@@ -1,0 +1,21 @@
+{
+  "happy": "/workflows/1",
+  "C": {
+    "frames": 604,
+    "seconds": 32.66
+  },
+  "chaos": "/workflows/2",
+  "D": {
+    "frames": 514,
+    "seconds": 29
+  },
+  "D2": {
+    "frames": 34,
+    "seconds": 6.58
+  },
+  "E": {
+    "frames": 269,
+    "seconds": 19.52
+  },
+  "capturedAt": "2026-11-06T22:31:52.087Z"
+}

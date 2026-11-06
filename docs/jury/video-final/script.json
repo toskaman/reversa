@@ -1,0 +1,67 @@
+[
+ {
+  "id": "s01",
+  "title": "Hook",
+  "text": "Your automation just finished half of a customer onboarding. Then billing failed. So who puts everything else back?"
+ },
+ {
+  "id": "s02",
+  "title": "Problem",
+  "text": "One business workflow can touch five systems: CRM, identity, support, billing and notifications. When step six fails, every step that already ran has changed something. Someone has to find out what changed, what is safe to undo, and prove where it ended."
+ },
+ {
+  "id": "s03",
+  "title": "Reveal",
+  "text": "This is REVERSA. A recovery control plane for A.I. operations. Reversible where possible. Accountable everywhere."
+ },
+ {
+  "id": "s04",
+  "title": "Live demo",
+  "text": "What you are about to see is the real application. First, live on our Vultr deployment. A visitor clicks Start demo. REVERSA opens an isolated demo session, plans a ten step onboarding, approves it, and executes it across five demo systems."
+ },
+ {
+  "id": "s05",
+  "title": "AI planning",
+  "text": "Plans can come from Vultr Serverless Inference. Here, a plain English request goes to the model, and the draft comes back as a structured plan. But the model only proposes. A deterministic policy gate checks every capability, dependency and risk, and the provenance shows exactly which planner produced the plan."
+ },
+ {
+  "id": "s06",
+  "title": "Preview and approval",
+  "text": "Before anything runs, REVERSA shows what each step will change, whether it can be reversed, and where a person must approve. The notification at the end cannot be unsent, so it is flagged as irreversible, in plain sight."
+ },
+ {
+  "id": "s07",
+  "title": "Verified execution",
+  "text": "Then it executes. Each step calls a connector, and REVERSA reads the system back to confirm the effect really exists. A green check means verified state, not just a successful response. Ten steps, ten verified, fifty nine events recorded."
+ },
+ {
+  "id": "s08",
+  "title": "Failure and recovery",
+  "text": "Now we break it on purpose. In the demo tenant, billing starts returning errors. After a bounded retry, step six fails. REVERSA blocks the two steps that depend on it, and compensates the completed work in reverse order. Seven compensation steps, one of them a read only no op. Then the Recovery Proof Engine checks every effect again. The verdict: verified with compensation."
+ },
+ {
+  "id": "s09",
+  "title": "Evidence",
+  "text": "Don't trust a success message. Every run produces an Evidence Passport: a hash chained record of the plan, the approval, every action and every reversal. Export it, and anyone can verify it offline. Eighty one events, valid. Anchor the count and the head hash, and truncation is ruled out too."
+ },
+ {
+  "id": "s10",
+  "title": "Vultr",
+  "text": "The whole platform runs on one Vultr cloud compute instance in Paris. The Next.js console, the FastAPI workflow engine, Postgres, and five isolated demo stores, behind automatic TLS. Vultr Serverless Inference is the optional A.I. planner."
+ },
+ {
+  "id": "s11",
+  "title": "Business",
+  "text": "For I.T. operations and business systems teams, the expensive part of a failed automation is not the failure. It is the investigation, the manual repair, and proving the final state. Workflow engines can retry and roll back. They do not prove what each system looks like afterwards. The first offer is a thirty day recovery audit, sandbox only, with success criteria agreed up front, then a platform fee plus execution volume. No customers yet. That pilot is how we earn them."
+ },
+ {
+  "id": "s12",
+  "title": "Originality",
+  "text": "Typed compensation. Verification after every effect. Uncertain outcomes kept uncertain. A.I. planning separated from authorization. And evidence anyone can check. One control layer."
+ },
+ {
+  "id": "s13",
+  "title": "Outro",
+  "text": "REVERSA. Reversible where possible. Accountable everywhere."
+ }
+]

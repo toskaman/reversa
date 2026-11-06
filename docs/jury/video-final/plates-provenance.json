@@ -1,0 +1,58 @@
+[
+ {
+  "scene": "s01",
+  "source": "D-chaos.mp4",
+  "in": 13.0,
+  "out": 19.0,
+  "target": 9.0,
+  "playback_speed": 0.667
+ },
+ {
+  "scene": "s04",
+  "source": "A-demo.mp4",
+  "in": 0.0,
+  "out": 20.4,
+  "target": 18.5,
+  "playback_speed": 1.103
+ },
+ {
+  "scene": "s05",
+  "source": "B-ai.mp4",
+  "in": 0.0,
+  "out": 26.1,
+  "target": 23.0,
+  "playback_speed": 1.135
+ },
+ {
+  "scene": "s06",
+  "source": "C-plan-exec.mp4",
+  "in": 2.0,
+  "out": 16.5,
+  "target": 16.0,
+  "playback_speed": 0.906
+ },
+ {
+  "scene": "s07",
+  "source": "C-plan-exec.mp4",
+  "in": 16.5,
+  "out": 32.8,
+  "target": 18.0,
+  "playback_speed": 0.906
+ },
+ {
+  "scene": "s08",
+  "source": "D-chaos.mp4",
+  "in": 0.0,
+  "out": 29.0,
+  "target": 27.0,
+  "playback_speed": 1.074
+ },
+ {
+  "scene": "s09",
+  "source": "E-evidence.mp4",
+  "in": 0.0,
+  "out": 19.5,
+  "target": 21.5,
+  "playback_speed": 0.907
+ }
+]

@@ -1,0 +1,89 @@
+{
+ "total": 234.58,
+ "scene_starts": {
+  "s01": 0.0,
+  "s02": 9.0,
+  "s03": 27.6,
+  "s04": 37.6,
+  "s05": 56.1,
+  "s06": 79.1,
+  "s07": 95.1,
+  "s08": 113.1,
+  "s09": 140.1,
+  "s10": 161.6,
+  "s11": 181.6,
+  "s12": 211.58,
+  "s13": 227.08
+ },
+ "music": [
+  [
+   "/root/film/work/audio/music/drone-open.wav",
+   0
+  ],
+  [
+   "/root/film/brag/skills/brag/assets/music/happy-beats-business-moves-vol-1-by-ende-dot-app.mp3",
+   37.300000000000004
+  ],
+  [
+   "/root/film/work/audio/music/drone-tension.wav",
+   119.425
+  ],
+  [
+   "/root/film/brag/skills/brag/assets/music/happy-beats-business-moves-vol-9-by-ende-dot-app.mp3",
+   125.35
+  ]
+ ],
+ "sfx": [
+  [
+   "impact/impactSoft_heavy_000.ogg",
+   0.05,
+   0.45
+  ],
+  [
+   "interface/error_005.ogg",
+   4.637,
+   0.32
+  ],
+  [
+   "impact/impactSoft_medium_001.ogg",
+   27.900000000000002,
+   0.5
+  ],
+  [
+   "interface/bong_001.ogg",
+   28.8,
+   0.4
+  ],
+  [
+   "interface/error_006.ogg",
+   120.925,
+   0.3
+  ],
+  [
+   "impact/impactSoft_medium_004.ogg",
+   122.375,
+   0.35
+  ],
+  [
+   "interface/bong_001.ogg",
+   135.0,
+   0.4
+  ],
+  [
+   "interface/drop_001.ogg",
+   150.813,
+   0.3
+  ],
+  [
+   "interface/select_008.ogg",
+   154.95,
+   0.35
+  ],
+  [
+   "impact/impactSoft_medium_001.ogg",
+   227.38000000000002,
+   0.45
+  ]
+ ],
+ "cues": 61
+}

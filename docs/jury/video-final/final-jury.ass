@@ -1,0 +1,73 @@
+[Script Info]
+ScriptType: v4.00+
+PlayResX: 1920
+PlayResY: 1080
+WrapStyle: 2
+
+[V4+ Styles]
+Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding
+Style: Default,Inter,40,&H00EEEBE9,&H00FFFFFF,&H00000000,&H9A0E0C0B,0,0,0,0,100,100,0,0,3,14,0,2,200,200,34,1
+
+[Events]
+Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
+Dialogue: 0,0:00:00.78,0:00:04.22,Default,,0,0,0,,Your automation just finished\Nhalf of a customer onboarding.
+Dialogue: 0,0:00:04.26,0:00:05.75,Default,,0,0,0,,Then billing failed.
+Dialogue: 0,0:00:05.79,0:00:07.78,Default,,0,0,0,,So who puts everything else back?
+Dialogue: 0,0:00:09.80,0:00:12.69,Default,,0,0,0,,One business workflow\Ncan touch five systems:
+Dialogue: 0,0:00:12.72,0:00:16.91,Default,,0,0,0,,CRM, identity, support,\Nbilling and notifications.
+Dialogue: 0,0:00:16.95,0:00:21.44,Default,,0,0,0,,When step six fails, every step that\Nalready ran has changed something.
+Dialogue: 0,0:00:21.48,0:00:26.68,Default,,0,0,0,,Someone has to find out what changed, what\Nis safe to undo, and prove where it ended.
+Dialogue: 0,0:00:28.38,0:00:29.77,Default,,0,0,0,,This is REVERSA.
+Dialogue: 0,0:00:29.81,0:00:32.90,Default,,0,0,0,,A recovery control\Nplane for AI operations.
+Dialogue: 0,0:00:32.94,0:00:36.27,Default,,0,0,0,,Reversible where possible.\NAccountable everywhere.
+Dialogue: 0,0:00:38.35,0:00:41.31,Default,,0,0,128,,{\an8}What you are about to see\Nis the real application.
+Dialogue: 0,0:00:41.35,0:00:43.95,Default,,0,0,128,,{\an8}First, live on our Vultr deployment.
+Dialogue: 0,0:00:43.99,0:00:46.02,Default,,0,0,128,,{\an8}A visitor clicks Start demo.
+Dialogue: 0,0:00:46.06,0:00:50.66,Default,,0,0,128,,{\an8}REVERSA opens an isolated demo\Nsession, plans a 10-step onboarding,
+Dialogue: 0,0:00:50.70,0:00:54.62,Default,,0,0,128,,{\an8}approves it, and executes\Nit across five demo systems.
+Dialogue: 0,0:00:56.85,0:01:00.06,Default,,0,0,128,,{\an8}Plans can come from Vultr\NServerless Inference.
+Dialogue: 0,0:01:00.10,0:01:05.31,Default,,0,0,128,,{\an8}Here, a plain English request goes to the\Nmodel, and the draft comes back as a structured
+Dialogue: 0,0:01:05.35,0:01:08.40,Default,,0,0,128,,{\an8}plan. But the model only proposes.
+Dialogue: 0,0:01:08.44,0:01:13.58,Default,,0,0,128,,{\an8}A deterministic policy gate checks\Nevery capability, dependency and risk,
+Dialogue: 0,0:01:13.62,0:01:17.30,Default,,0,0,128,,{\an8}and the provenance shows exactly\Nwhich planner produced the plan.
+Dialogue: 0,0:01:19.85,0:01:23.66,Default,,0,0,128,,{\an8}Before anything runs, REVERSA\Nshows what each step will change,
+Dialogue: 0,0:01:23.70,0:01:27.35,Default,,0,0,128,,{\an8}whether it can be reversed, and\Nwhere a person must approve.
+Dialogue: 0,0:01:27.39,0:01:32.36,Default,,0,0,128,,{\an8}The notification at the end cannot be\Nunsent, so it is flagged as irreversible,
+Dialogue: 0,0:01:32.40,0:01:33.75,Default,,0,0,128,,{\an8}in plain sight.
+Dialogue: 0,0:01:35.88,0:01:37.27,Default,,0,0,128,,{\an8}Then it executes.
+Dialogue: 0,0:01:37.31,0:01:41.93,Default,,0,0,128,,{\an8}Each step calls a connector, and REVERSA\Nreads the system back to confirm the effect
+Dialogue: 0,0:01:41.97,0:01:48.02,Default,,0,0,128,,{\an8}really exists. A green check means verified\Nstate, not just a successful response.
+Dialogue: 0,0:01:48.06,0:01:51.85,Default,,0,0,128,,{\an8}10 steps, 10 verified, 59 events recorded.
+Dialogue: 0,0:01:53.92,0:01:55.65,Default,,0,0,128,,{\an8}Now we break it on purpose.
+Dialogue: 0,0:01:55.69,0:01:58.87,Default,,0,0,128,,{\an8}In the demo tenant, billing\Nstarts returning errors.
+Dialogue: 0,0:01:58.91,0:02:01.82,Default,,0,0,128,,{\an8}After a bounded retry, step six fails.
+Dialogue: 0,0:02:01.86,0:02:05.91,Default,,0,0,128,,{\an8}REVERSA blocks the two steps that depend\Non it, and compensates the completed work
+Dialogue: 0,0:02:05.95,0:02:07.37,Default,,0,0,128,,{\an8}in reverse order.
+Dialogue: 0,0:02:07.41,0:02:11.40,Default,,0,0,128,,{\an8}Seven compensation steps, one\Nof them a read-only no-op.
+Dialogue: 0,0:02:11.44,0:02:15.78,Default,,0,0,128,,{\an8}Then the Recovery Proof Engine checks\Nevery effect again. The verdict:
+Dialogue: 0,0:02:15.82,0:02:17.97,Default,,0,0,128,,{\an8}verified with compensation.
+Dialogue: 0,0:02:20.90,0:02:22.80,Default,,0,0,128,,{\an8}Don't trust a success message.
+Dialogue: 0,0:02:22.84,0:02:25.50,Default,,0,0,128,,{\an8}Every run produces an Evidence Passport:
+Dialogue: 0,0:02:25.54,0:02:30.61,Default,,0,0,128,,{\an8}a hash-chained record of the plan, the\Napproval, every action and every reversal
+Dialogue: 0,0:02:30.65,0:02:34.00,Default,,0,0,128,,{\an8}. Export it, and anyone\Ncan verify it offline.
+Dialogue: 0,0:02:34.04,0:02:35.70,Default,,0,0,128,,{\an8}Eighty one events, valid.
+Dialogue: 0,0:02:35.74,0:02:39.85,Default,,0,0,128,,{\an8}Anchor the count and the head hash,\Nand truncation is ruled out too.
+Dialogue: 0,0:02:42.38,0:02:46.92,Default,,0,0,0,,The whole platform runs on one Vultr\Ncloud compute instance in Paris.
+Dialogue: 0,0:02:46.96,0:02:53.31,Default,,0,0,0,,The Next.js console, the FastAPI workflow\Nengine, Postgres, and five isolated demo
+Dialogue: 0,0:02:53.35,0:02:56.44,Default,,0,0,0,,stores, behind automatic TLS.
+Dialogue: 0,0:02:56.47,0:03:00.12,Default,,0,0,0,,Vultr Serverless Inference\Nis the optional AI planner.
+Dialogue: 0,0:03:02.38,0:03:07.09,Default,,0,0,0,,For IT operations and business systems teams,\Nthe expensive part of a failed automation
+Dialogue: 0,0:03:07.12,0:03:08.49,Default,,0,0,0,,is not the failure.
+Dialogue: 0,0:03:08.53,0:03:12.72,Default,,0,0,0,,It is the investigation, the manual\Nrepair, and proving the final state.
+Dialogue: 0,0:03:12.76,0:03:15.38,Default,,0,0,0,,Workflow engines can retry and roll back.
+Dialogue: 0,0:03:15.42,0:03:18.16,Default,,0,0,0,,They do not prove what each\Nsystem looks like afterwards.
+Dialogue: 0,0:03:18.20,0:03:23.24,Default,,0,0,0,,The first offer is a 30-day recovery\Naudit, sandbox-only, with success criteria
+Dialogue: 0,0:03:23.28,0:03:27.06,Default,,0,0,0,,agreed up front, then a platform\Nfee plus execution volume.
+Dialogue: 0,0:03:27.10,0:03:28.42,Default,,0,0,0,,No customers yet.
+Dialogue: 0,0:03:28.46,0:03:30.57,Default,,0,0,0,,That pilot is how we earn them.
+Dialogue: 0,0:03:32.36,0:03:36.35,Default,,0,0,0,,Typed compensation.\NVerification after every effect.
+Dialogue: 0,0:03:36.39,0:03:38.88,Default,,0,0,0,,Uncertain outcomes kept uncertain.
+Dialogue: 0,0:03:38.92,0:03:41.92,Default,,0,0,0,,AI planning separated from authorization.
+Dialogue: 0,0:03:41.96,0:03:43.98,Default,,0,0,0,,And evidence anyone can check.
+Dialogue: 0,0:03:44.02,0:03:45.66,Default,,0,0,0,,One control layer.
+Dialogue: 0,0:03:47.86,0:03:51.96,Default,,0,0,128,,{\an8}REVERSA. Reversible where\Npossible. Accountable everywhere.

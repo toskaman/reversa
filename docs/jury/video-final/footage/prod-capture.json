@@ -1,0 +1,39 @@
+{
+  "demoWorkflow": "/workflows/104",
+  "A": {
+    "frames": 313,
+    "seconds": 20.36
+  },
+  "aiStatus": 201,
+  "aiProvider": "vultr-inference",
+  "aiWorkflow": 105,
+  "aiKind": "plan",
+  "B": {
+    "frames": 427,
+    "seconds": 26.12
+  },
+  "aiCreatedEvent": {
+    "seq": 1,
+    "ts": "2026-11-06T22:32:42.535562+00:00",
+    "type": "workflow.created",
+    "actor": "guest:94c5fc8b0e7585d3",
+    "payload": {
+      "provider": "vultr-inference",
+      "model": "***REDACTED***",
+      "latency_ms": 7801,
+      "usage": {
+        "prompt_tokens": "***REDACTED***",
+        "completion_tokens": "***REDACTED***",
+        "total_tokens": "***REDACTED***",
+        "attempts": 1,
+        "model_requested": "***REDACTED***",
+        "model_returned": "***REDACTED***",
+        "model_substituted": false
+      },
+      "warnings": []
+    },
+    "prev_hash": "GENESIS",
+    "hash": "4af45bfba02f794678d6d7fe00d01fdcc759d8ce7e689140e715042e60c96804"
+  },
+  "capturedAt": "2026-11-06T22:32:57.855Z"
+}

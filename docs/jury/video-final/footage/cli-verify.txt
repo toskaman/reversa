@@ -1,0 +1,6 @@
+$ python -m reversa_api.cli verify reversa-evidence-2.json
+VALID: offline chain valid (81 events recomputed)
+exit=0
+$ python -m reversa_api.cli verify --strict --expect-count 81 --expect-head 98060aea5a57a61bf089745e599d5abfb831a1a5e2fb09a132f3edceda1203f4 reversa-evidence-2.json
+VALID: strict chain complete (81 events recomputed, anchors match; note: event `ts` timestamps are exported but NOT covered by the hash chain; ts edits are undetectable offline)
+exit=0

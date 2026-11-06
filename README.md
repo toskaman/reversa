@@ -107,7 +107,8 @@ immutability alone. Demo systems are labeled as such.
 
 - [Jury dossier](docs/jury/) — overview, compliance, architecture, proofs,
   AI, security, benchmarks, business case, demo script, verification.
-- [Demo videos](docs/jury/) — `demo-v3.mp4` (50 s, EN narration, recorded on the pre-V12 UI); `demo-v2.mp4`, 85 s narrated from real captures
+- [Jury film](docs/jury/video-final/) — `final-jury-clean.mp4` (3:55, V12 UI, real production + same-build captures, local Kokoro narration, claim-evidence ledger, editable sources). Music: Sascha Ende, ende.app (CC BY 4.0).
+- [Earlier videos](docs/jury/) — `demo-v3.mp4` (50 s, EN narration, recorded on the pre-V12 UI); `demo-v2.mp4`, 85 s narrated from real captures
   (6 scene clips + SRT; assembled per `v2-clips/shot-log.md`); V1 66 s
   (`demo.mp4`, built by `build_video.py`) kept as fallback.
 - [LabLab texts](docs/jury/lablab-submission.md) · [Slides](docs/jury/slides.md)
