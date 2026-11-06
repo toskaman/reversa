@@ -58,26 +58,36 @@ SLIDES = [
 class Deck(FPDF):
     def slide(self, title, subtitle, bullets, shot):
         self.add_page()
-        self.set_fill_color(10, 14, 20)
+        self.set_fill_color(11, 12, 14)
         self.rect(0, 0, 297, 210, "F")
+        tw = 125 if shot else 0  # text column width (0 = full width)
         self.set_xy(15, 14)
-        self.set_text_color(34, 211, 238)
+        self.set_text_color(124, 156, 255)
         self.set_font("helvetica", "B", 13)
         self.cell(0, 8, "REVERSA", new_x="LMARGIN", new_y="NEXT")
-        self.set_text_color(230, 235, 242)
+        self.set_text_color(233, 235, 238)
         self.set_font("helvetica", "B", 30)
-        self.multi_cell(0, 12, title)
-        self.set_text_color(154, 167, 189)
+        self.multi_cell(tw, 12, title, new_x="LMARGIN", new_y="NEXT")
+        self.set_text_color(149, 155, 165)
         self.set_font("helvetica", "", 16)
-        self.cell(0, 10, subtitle, new_x="LMARGIN", new_y="NEXT")
-        self.ln(2)
-        self.set_text_color(230, 235, 242)
+        self.multi_cell(tw, 8, subtitle, new_x="LMARGIN", new_y="NEXT")
+        self.ln(4)
+        self.set_text_color(233, 235, 238)
         self.set_font("helvetica", "", 13)
         for line in bullets:
-            self.cell(0, 8, "-  " + line, new_x="LMARGIN", new_y="NEXT")
+            self.multi_cell(tw, 7, "-  " + line, new_x="LMARGIN", new_y="NEXT")
         if shot:
-            self.image(os.path.join(GAL, shot), x=15, y=128, w=267)
-
+            # Full-page captures are cropped from the top to the frame's aspect
+            # ratio (real pixels, no scaling artefacts), then fitted right.
+            from PIL import Image
+            box_x, box_y, box_w, box_h = 148, 16, 134, 180
+            im = Image.open(os.path.join(GAL, shot)).convert("RGB")
+            ch = min(im.height, round(im.width * box_h / box_w))
+            im = im.crop((0, 0, im.width, ch))
+            h = box_w * im.height / im.width
+            self.set_draw_color(40, 44, 50)
+            self.rect(box_x - 0.5, box_y - 0.5, box_w + 1, h + 1)
+            self.image(im, x=box_x, y=box_y, w=box_w)
 
 deck = Deck(orientation="L", format="A4")
 deck.set_auto_page_break(False)
