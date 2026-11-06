@@ -23,10 +23,11 @@ and support. No pricing is final; no revenue, customers, or ROI are claimed.
 → execute, owner token only as fallback) → connect one real system in a
 sandbox → paid pilot measured on recovery hours saved.
 
-**Measured proof behind the pitch (RC6 v0.2.0-rc.6):** 689-test API suite
+**Measured proof behind the pitch (RC8 v0.2.0-rc.8):** 778-test API suite
 green (2 honest skips), chaos matrix 20/20, 100-case offline planner eval
-plus a 2×10 live Vultr Inference campaign (31,975 tokens, in-repo) —
-baseline 100% schema-valid, 0% refusal, a stated limitation.
+plus live Vultr Inference campaigns (2×10 + 12-case A/B, 65,553 tokens,
+in-repo aggregates) — baseline 100% schema-valid, 0% refusal, a stated
+limitation.
 
 **Interactive calculator:** the live `/roi` page implements §15.3 with
 editable hypotheses and the measured demo recovery rate (100%, n=5 chaos

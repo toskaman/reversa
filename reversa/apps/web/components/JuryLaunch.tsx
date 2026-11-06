@@ -172,7 +172,7 @@ export default function JuryLaunch() {
     setMintedVia(via);
 
     // 3. Run the demo as the guest: intent -> approve? -> execute.
-    // Guests cannot touch chaos injection, so this is a clean onboard.
+    // Guest chaos runs via Demo Lab (own org only); this path runs a clean onboard.
     let intent: IntentOut;
     setPhase("creating");
     try {
