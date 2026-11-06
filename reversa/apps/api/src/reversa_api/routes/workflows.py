@@ -369,10 +369,13 @@ def approve_workflow(wf_id: int, body: ApproveIn, org: OrgCtx = Depends(get_curr
     if body.plan_hash != approval.plan_hash or body.plan_hash != current_hash:
         raise HTTPException(status_code=409, detail="plan changed since approval was requested")
     approval.status = "APPROVED"
-    approval.decided_by = body.decided_by or org.actor
-    _set_state(session, wf, "READY", org.actor, f"approved by {approval.decided_by}")
+    # RT-V5-04: the durable approver is the authenticated actor, never the
+    # self-attested client label (which survives only as display metadata).
+    approval.decided_by = org.actor
+    _set_state(session, wf, "READY", org.actor, f"approved by {org.actor}")
     append_event(session, wf.id, wf.org_id, "approval.granted",
-                 {"decided_by": approval.decided_by}, actor=org.actor)
+                 {"decided_by": org.actor,
+                  "decided_by_label": body.decided_by}, actor=org.actor)
     session.commit()
     return {"workflow": _out(session, wf, org.slug)}
 
@@ -510,11 +513,28 @@ SSE_TICKET_TTL_SECONDS = 30
 _SSE_TICKETS: dict[str, dict] = {}
 _SSE_TICKETS_LOCK = threading.Lock()
 
+# RT-V5-07: mint is authenticated but uncapped, so the store must be
+# bounded (each live ticket can pin a 120 s blocking stream). Expired
+# tickets purge first; overflow past the cap evicts oldest-first, which
+# hurts a flooder's own tickets before anyone else's.
+SSE_TICKET_MAX_OPEN = 1_000
+
+
+def reset_sse_ticket_state() -> None:
+    """Tests only: drop all minted stream tickets."""
+    with _SSE_TICKETS_LOCK:
+        _SSE_TICKETS.clear()
+
 
 def _purge_expired_tickets(now: float) -> None:
     expired = [t for t, v in _SSE_TICKETS.items() if v["expires_at"] <= now]
     for t in expired:
         del _SSE_TICKETS[t]
+    if len(_SSE_TICKETS) >= SSE_TICKET_MAX_OPEN:
+        for t, _ in sorted(_SSE_TICKETS.items(),
+                           key=lambda kv: kv[1]["expires_at"])[
+                :len(_SSE_TICKETS) - SSE_TICKET_MAX_OPEN + 1]:
+            del _SSE_TICKETS[t]
 
 
 def _redeem_stream_ticket(ticket: str, wf_id: int) -> OrgCtx:

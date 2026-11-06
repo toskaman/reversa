@@ -18,6 +18,15 @@ TYPE_CHECKS = {
 }
 
 
+def _type_matches(value, typename: str, expected: type) -> bool:
+    if not isinstance(value, expected):
+        return False
+    # RT-V5-10: bool subclasses int, but True/False are not valid ints.
+    if typename == "int" and isinstance(value, bool):
+        return False
+    return True
+
+
 @dataclass
 class ValidationIssue:
     code: str
@@ -63,6 +72,9 @@ MAX_CLARIFICATION_QUESTIONS = 3
 # onboarding provisions a handful of users; templates use 2).
 MAX_PROVISION_USERS = 100
 MAX_USER_EMAIL_LEN = 254
+# RT-V5-05b: bound the plan itself (flagship onboarding is 10 steps;
+# 32 leaves wide headroom while capping executor fan-out).
+MAX_PLAN_STEPS = 32
 
 
 def refusal_steps(
@@ -102,6 +114,10 @@ def validate_plan(plan: dict) -> tuple[list[dict], bool, list[ValidationIssue]]:
     raw_steps = plan.get("steps", []) if isinstance(plan, dict) else []
     if not isinstance(raw_steps, list) or not raw_steps:
         return [], False, [ValidationIssue("EMPTY_PLAN", 0, "steps", "plan has no steps")]
+    if len(raw_steps) > MAX_PLAN_STEPS:
+        return [], False, [ValidationIssue(
+            "TOO_MANY_STEPS", 0, "steps",
+            f"plan has at most {MAX_PLAN_STEPS} steps")]
     normalized: list[dict] = []
     approval_required = False
     for i, raw in enumerate(raw_steps, start=1):
@@ -116,7 +132,7 @@ def validate_plan(plan: dict) -> tuple[list[dict], bool, list[ValidationIssue]]:
             issues.append(ValidationIssue("BAD_INPUTS", i, "inputs", "inputs must be an object"))
             continue
         if not isinstance(depends_on, list) or any(
-            not isinstance(d, int) or d < 1 or d >= i for d in depends_on
+            type(d) is not int or d < 1 or d >= i for d in depends_on
         ):
             issues.append(ValidationIssue(
                 "BAD_DEPS", i, "depends_on",
@@ -168,7 +184,8 @@ def validate_plan(plan: dict) -> tuple[list[dict], bool, list[ValidationIssue]]:
             if key not in inputs:
                 issues.append(ValidationIssue("MISSING_INPUT", i, f"inputs.{key}",
                                               f"missing required input '{key}'"))
-            elif expected is not None and not isinstance(inputs[key], expected):
+            elif expected is not None and not _type_matches(
+                    inputs[key], typename, expected):
                 issues.append(ValidationIssue(
                     "BAD_INPUT_TYPE", i, f"inputs.{key}",
                     f"'{key}' must be {typename}"))

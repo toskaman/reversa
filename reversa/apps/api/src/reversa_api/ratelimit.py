@@ -1,9 +1,11 @@
 """Minimal in-memory fixed-window rate limiting (P1-AUTH-02).
 
-Covers the two costliest endpoints per docs/security/token-rotation.md section 4:
-intent creation and workflow execution. Keyed by credential hash when an auth
-header is present, otherwise by client IP. Unwatched paths and methods pass
-through untouched.
+Covers the costliest endpoints per docs/security/token-rotation.md section 4:
+intent creation and workflow execution. RT-V5-01: also covers credential
+minting (owner guest-sessions + owner tokens), so fresh tokens cannot be
+minted at full speed to rotate into fresh intent/execute buckets. Keyed by
+credential hash when an auth header is present, otherwise by client IP.
+Unwatched paths and methods pass through untouched.
 
 Single-process only (same assumption as the SSE ticket and guest stores).
 """
@@ -21,6 +23,7 @@ from fastapi.responses import JSONResponse
 _TIERS: dict[str, tuple[int, int]] = {
     "intents": (30, 60),
     "execute": (10, 60),
+    "mint": (20, 60),
 }
 
 # (tier, key) -> [window_start_epoch, count]
@@ -70,6 +73,10 @@ def _tier_for(method: str, path: str) -> str | None:
     norm = path[:-1] if len(path) > 1 and path.endswith("/") else path
     if norm == "/api/v1/intents":
         return "intents"
+    # RT-V5-01: exact match only — /guest-sessions/public keeps its own
+    # stricter per-IP limiter in routes/guest_sessions.py.
+    if norm in ("/api/v1/demo/guest-sessions", "/api/v1/demo/tokens"):
+        return "mint"
     path = norm
     prefix, suffix = "/api/v1/workflows/", "/execute"
     if path.startswith(prefix) and path.endswith(suffix):

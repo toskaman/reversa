@@ -71,6 +71,31 @@ PUBLIC_MINT_WINDOW_SECONDS = 3600
 _PUBLIC_WINDOWS: dict[str, list] = {}
 _PUBLIC_LOCK = threading.Lock()
 
+# RT-V5-07: keys derive from peer IPs, so the store must be bounded
+# (NAT/proxy churn could otherwise grow it without limit). Same
+# expired-first, oldest-next eviction as ratelimit._WINDOWS.
+_PUBLIC_MAX_WINDOWS = 10_000
+
+
+def _evict_public_windows(now: float) -> None:
+    """Drop expired, then oldest, windows until under the cap.
+
+    Caller must hold _PUBLIC_LOCK.
+    """
+    if len(_PUBLIC_WINDOWS) <= _PUBLIC_MAX_WINDOWS:
+        return
+    window = max(float(PUBLIC_MINT_WINDOW_SECONDS), 1.0)
+    for ip in [ip for ip, slot in _PUBLIC_WINDOWS.items()
+               if now - slot[0] >= window]:
+        del _PUBLIC_WINDOWS[ip]
+        if len(_PUBLIC_WINDOWS) <= _PUBLIC_MAX_WINDOWS:
+            return
+    if len(_PUBLIC_WINDOWS) > _PUBLIC_MAX_WINDOWS:
+        for ip, _ in sorted(_PUBLIC_WINDOWS.items(),
+                            key=lambda kv: kv[1][0])[
+                :len(_PUBLIC_WINDOWS) - _PUBLIC_MAX_WINDOWS]:
+            del _PUBLIC_WINDOWS[ip]
+
 
 def reset_public_mint_state() -> None:
     """Tests only: drop all public-mint window counters."""
@@ -130,6 +155,9 @@ def _check_public_mint(ip: str, now: float) -> tuple[bool, float]:
         slot = _PUBLIC_WINDOWS.get(ip)
         if slot is None or now - slot[0] >= window:
             _PUBLIC_WINDOWS[ip] = [now, 1]
+            # Evict after insert so the store never exceeds the cap
+            # (evict-before-insert would steady-state at cap + 1).
+            _evict_public_windows(now)
             return True, 0.0
         if slot[1] < limit:
             slot[1] += 1
