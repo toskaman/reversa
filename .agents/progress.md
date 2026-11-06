@@ -45,7 +45,7 @@
   rate-limit par visiteur), refus agentiques 422, eval 100 cas +
   runner live plafonné, campagne live n=30 (29/30 acceptés, 87k tokens).
 
-## 2026-11-05 — RC5 Cycle 2 + RC6 — ÉTAT COURANT
+## 2026-11-05 — RC5 Cycle 2 + RC6 — TERMINÉ
 
 - RC5 (`0cecb98`, merge `ab0e66b`, tag `v0.2.0-rc.5`): 688 tests +
   2 skips, Cycle 2 agentique live (intent gate clarify max 3 / refuse,
@@ -61,3 +61,33 @@
 - Dépense constatée: $0.28 (crédit $200, ~$199.72 restants), projeté <$3.
 - Reste (humain requis): soumission LabLab (compte), re-vérification
   dashboard + heure cutoff. VM à garder allumée.
+
+## 2026-11-06 — RC7 — TERMINÉ
+
+- Token revocation historique, redaction renforcée, bornes d'entrées,
+  atomic chaos cap. Suite 771 + 2 skips. Modèle A/B n=12 (A 10/12 gardé).
+
+## 2026-11-06 — RC8 — TERMINÉ
+
+- Durcissement evidence/CLI + tickets SSE. Suite 778 + 2 skips.
+
+## 2026-11-06 — RC9 — TERMINÉ (V7)
+
+- SSE bounds (idle 30 s, heartbeat, cap 32, resume since_seq) + vue
+  shared (6 redactions). Suite 786 + 2 skips. Prod wf90 COMPLETED 59 /
+  wf91 COMPENSATED 81, 3× CLI VALID. wf41 classé lecture-seule, laissé
+  en place.
+
+## 2026-11-06 — V8 audit — TERMINÉ
+
+- Fuite slot SSE pinnée (xfail strict), vue shared reclassée interne,
+  START-HERE + pitch + delta gauntlet. Suite 787 + 1 xfailed + 2 skips.
+
+## 2026-11-06 — RC10 — ÉTAT COURANT
+
+- Fix fuite SSE (lease idempotente + finalize), omission actors approvals
+  shared (8 redactions). **792 tests + 2 skips**, 0 échec. CI verte.
+- Prod `0.2.0-rc.10` : wf93 COMPLETED 59 / wf94 COMPENSATED 81, 3× CLI
+  VALID, SSE done 0.6 s. Tag `v0.2.0-rc.10`.
+- Reste (humain requis): soumission LabLab — voir
+  `docs/jury/SUBMISSION-ACTION-REQUIRED.md`. VM allumée.
