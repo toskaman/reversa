@@ -1,16 +1,19 @@
 # 10 — Final verification
 
-Verified 2026-11-05 (this list is the gate; all green):
+Verified 2026-11-06 (RC7 gate; all green):
 
 - [x] Public URL serves web (200) + API (`db:true`) over valid HTTPS.
 - [x] Fresh intent → approve → execute → COMPLETED remotely (59-event chain).
 - [x] Chaos run remotely → COMPENSATED with reverse-order proofs.
 - [x] Evidence JSON validates with the offline CLI.
-- [x] Backend suite 689 passed / 2 honest skips (RC `v0.2.0-rc.6`); browser E2E 10/10
+- [x] Backend suite 771 passed / 2 honest skips (RC `5dac22a` `0.2.0-rc.7`, archive-verified); browser E2E 10/10
   with 0 console errors, re-run against prod on 2026-11-05; benchmarks published.
 - [x] Vultr Inference live in prod (`deepseek-v4.1-flash-1017`): real AI plan
   via guest intent (201, 10 steps, accepted after 2 attempts); malformed AI
   drafts rejected 422, never executed.
+- [x] Prod prompt decided by live A/B (2026-11-06, 12 cases, 33,578 tokens):
+  A 10/12 = 0.833 kept in prod; B protocol_v5 11/12 = 0.917 stays experimental
+  (+19% tokens, simple-legit regression). See `05-ai-integration.md`.
 - [x] No secrets in repo (`.env` gitignored; tokens only in server logs/DM).
 - [x] License MIT; no copied code; deps MIT/BSD (FastAPI, Pydantic,
       SQLAlchemy, Next.js, React, Postgres, Caddy images).

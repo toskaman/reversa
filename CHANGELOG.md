@@ -10,6 +10,21 @@ Skips in all releases are the same two honest conditional skips
 (Vultr live-provider eval, GitHub live cycle); no Vultr/GitHub secrets
 were present in the environment when the counts were observed.
 
+## RC7 — V5 redteam fixes + A/B prompt decision (0.2.0-rc.7)
+
+- Commit: `5dac22a`, 2026-11-06 (joint API+web bump; tag `v0.2.0-rc.7` after CI + prod verification).
+- V5 wave2 (`418adff`) + V5 redteam fixes (`084b4d2`): atomic chaos cap, token
+  revocation + revoke-historic CLI, protocol_v5 (experimental, not wired),
+  eval_v5 harness, safe evidence JSON parse, SSE ticket no-burn, input bounds,
+  planner extras strip, short-desc 224 chars (LabLab 255 limit).
+- API suite: 771 passed / 2 honest skips on pristine `git archive` extract of
+  `084b4d2` (workspace `.venv`, 105 s); `5dac22a` touches version strings only
+  (no test references them; CI re-runs the suite on the merged tree).
+- Live prompt A/B (2026-11-06, `deepseek-v4.1-flash-1017`, 12 balanced cases,
+  33,578 tokens, no early stop): A 10/12 = 0.833 kept in prod, B protocol_v5
+  11/12 = 0.917 stays experimental (+19% tokens, simple-legit regression,
+  flagship step deviation). Details: `docs/jury/05-ai-integration.md`.
+
 ## RC6 — Guest chaos for the jury Recovery Moment (0.2.0-rc.6)
 
 - Commit: `db99170`, tag `v0.2.0-rc.6`, 2026-11-05.

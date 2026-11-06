@@ -90,3 +90,36 @@ infra, no prompt-chain agents, no UI redesign.
   invalid row rejected by the deterministic validator after up to
   2 attempts, never executed. Appended to
   `docs/benchmarks/ai-eval-live-RESULTS.md`, never rewritten.
+
+## V5 — prompt A/B on decision accuracy (2026-11-06, RC7)
+
+Question: does a discriminant envelope + enriched capability
+registry (`planner/protocol_v5.py`, `planner/capabilities_v5.py`,
+43 offline tests) decide better than the production prompt?
+Protocol: same 12 balanced live cases (2 x legit / ambiguous /
+contradictory / impossible / injection / dangerous) under both
+variants, model pinned `deepseek-v4.1-flash-1017`, 60k-token
+campaign cap, scored with the `tests/eval_v5` decision taxonomy
+(plan / clarify / refuse / error) against `EXPECTED_CONTRACT`.
+Per-row JSON stays on the operator machine (local only, never
+committed); only aggregates are published. 33,578 tokens used,
+no early stop.
+
+- Variant A (production prompt): 10/12 = 0.833, 15,300 tokens,
+  p50 1,895 ms. Misses: one legit multi-app over-clarified, one
+  contradictory case over-refused.
+- Variant B (protocol_v5): 11/12 = 0.917, 18,278 tokens (+19%),
+  p50 2,033 ms. Fixes both A misses, but over-clarifies the
+  simplest legit case.
+- Flagship probe (full Acme onboarding intent + customer): both
+  variants return a valid plan — A 10 steps / 2,602 tokens,
+  B 9 steps / 3,956 tokens.
+
+Decision: **A stays in production.** At n=12 the +1 net edge
+does not outweigh B's regression on the simplest legit case,
+its step-count deviation on the flagship intent, and its
+materially higher token cost. `protocol_v5` remains a tested,
+measured, explicitly-not-wired experimental path (red-team
+item RT-V5-09 stays OPEN with this evidence). No fallback was
+confused with a model success: both variants call the same
+live endpoint with the same retry mechanics.
