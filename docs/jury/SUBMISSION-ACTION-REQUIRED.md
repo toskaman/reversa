@@ -12,8 +12,9 @@ dashboard first — if it differs, that value wins.
    short/long description, technologies, tags).
 3. Links: repo https://github.com/toskaman/reversa, demo
    https://217.69.7.155.nip.io.
-4. Upload video `docs/jury/demo-v2.mp4` (85 s, narrated, audited
-   SHIP-READY). Do NOT wait for V3.
+4. Upload video `docs/jury/demo-v3.mp4` (50 s, 1920x1080, English
+   narration, SRT `docs/jury/demo-v3.srt`). Fallback if the upload is
+   rejected: `docs/jury/demo-v2.mp4` (85 s).
 5. Upload slides + cover from `docs/jury/` (see `media-checklist.md`).
 6. Confirm status shows **SUBMITTED** (not DRAFT) and screenshot it.
 

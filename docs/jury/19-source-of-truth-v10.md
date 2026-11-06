@@ -24,11 +24,12 @@ RC11 decision: **NOT JUSTIFIED** — no prod code changed this cycle
 10. Open limitations: single-model planner; A/B n=12; N=1/5/10 only;
     single VM SPOF (restore tested RC7); shared view internal-only;
     GitHub connector tested but unconfigured (no token/allowlist);
-    V2 video ships; wf41 untouched by design; zero customers/revenue.
+    V3 video ships (50.4 s, EN, `demo-v3.mp4`); wf41 untouched by design;
+    zero customers/revenue.
 11. Submission: NOT confirmed — human-only filing, see
     `SUBMISSION-ACTION-REQUIRED.md` (deadline Mon 2026-11-09 00:00 Paris,
-    dashboard value wins). Package frozen + verified (mp4 85.19 s, srt,
-    slides, covers, texts).
+    dashboard value wins). Package frozen + verified (V3 mp4 50.4 s + srt,
+    V2 85.19 s fallback, slides, covers, texts).
 12. Scores (internal, evidence-backed): Tech 9, Reliability 8, Security 8,
     AI 7, Product 9, Originality 9, Business 7, Repro 9, Presentation 8,
     Compliance 9 (filing = the missing point). Official estimates:

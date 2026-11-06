@@ -7,8 +7,10 @@ No code changed this cycle (docs + verification only). RC10
 
 Status: NOT confirmed — human-only filing, see
 `SUBMISSION-ACTION-REQUIRED.md` (deadline Mon 2026-11-09 00:00 Paris,
-dashboard value wins). Package re-verified: mp4 85.19 s h264/aac, srt,
-slides, covers, texts, 0 broken doc links, MIT, Challenge 2, Vultr-hosted.
+dashboard value wins). Package re-verified: V3 mp4 50.4 s 1920x1080
+h264/aac + srt (`demo-v3.mp4`, built 2026-11-06 with brag/HyperFrames and
+ElevenLabs EN narration), V2 mp4 85.19 s kept as fallback, slides, covers,
+texts, 0 broken doc links, MIT, Challenge 2, Vultr-hosted.
 
 ## B. Engineering (V11 delta)
 
@@ -18,7 +20,9 @@ slides, covers, texts, 0 broken doc links, MIT, Challenge 2, Vultr-hosted.
 - GitHub connector: re-audited — deny-by-default + INDETERMINATE test
   present, but no token/allowlist on the VM → stays honestly unconfigured.
 - Gaps A/C/D re-confirmed deferred with reasons (migration risk / credit
-  budget / demo risk). V3 NO-GO re-confirmed (no browsers/recorder).
+  budget / demo risk). V3 was NO-GO at V11 (no browser recorder); it is now
+  BUILT (2026-11-06, brag + HyperFrames + ElevenLabs voice, see
+  `media-checklist.md` section 11) and supersedes V2 as the upload.
 - Board: 57 submissions, ARC still the only verified Challenge 2 rival.
 
 ## C. Business (NEW)

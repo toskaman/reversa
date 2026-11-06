@@ -1,0 +1,557 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=1920, height=1080" />
+    <title>REVERSA — Accountable AI operations</title>
+    <script src="assets/gsap.min.js"></script>
+    <style>
+      :root {
+        --bg0: #0a0e14;
+        --bg1: #11161f;
+        --bg2: #1a2230;
+        --fg: #e6ebf2;
+        --muted: #9aa7bd;
+        --cyan: #22d3ee;
+        --green: #22c55e;
+        --amber: #f59e0b;
+        --red: #ef4444;
+        --violet: #a78bfa;
+        --indigo: #5a5fe8;
+        --mono: "JetBrains Mono", ui-monospace, monospace;
+        --sans: "Inter", ui-sans-serif, system-ui, sans-serif;
+      }
+      * { margin: 0; padding: 0; box-sizing: border-box; }
+      html, body {
+        width: 1920px; height: 1080px; overflow: hidden;
+        background: var(--bg0); color: var(--fg);
+        font-family: var(--sans);
+      }
+      #root { position: relative; width: 100%; height: 100%; overflow: hidden; background: var(--bg0); }
+
+      /* ---------- background ---------- */
+      #bg { position: absolute; inset: 0; z-index: 0; }
+      #bg .grid {
+        position: absolute; inset: -10%;
+        background-image:
+          linear-gradient(rgba(154,167,189,0.055) 1px, transparent 1px),
+          linear-gradient(90deg, rgba(154,167,189,0.055) 1px, transparent 1px);
+        background-size: 72px 72px;
+        mask-image: radial-gradient(circle at 50% 45%, #000 20%, transparent 78%);
+      }
+      #bg .glow { position: absolute; border-radius: 999px; filter: blur(90px); opacity: .32; }
+      #bg .glow-a { width: 980px; height: 980px; left: -260px; top: -360px; background: #0e7490; }
+      #bg .glow-b { width: 880px; height: 880px; right: -280px; bottom: -380px; background: #312e81; }
+
+      .clip { position: absolute; }
+      .media {
+        left: 0; top: 0; width: 1920px; height: 1080px;
+        object-fit: cover; object-position: center top;
+      }
+      .dim { opacity: .16; }
+      .shade {
+        left: 0; top: 0; width: 1920px; height: 1080px;
+        background:
+          linear-gradient(180deg, rgba(10,14,20,.62) 0%, rgba(10,14,20,.08) 20%, rgba(10,14,20,.10) 58%, rgba(10,14,20,.94) 100%);
+      }
+      .tint-hook {
+        left: 0; top: 0; width: 1920px; height: 1080px;
+        background:
+          radial-gradient(circle at 28% 44%, rgba(239,68,68,.20), transparent 42%),
+          linear-gradient(180deg, rgba(10,14,20,.88) 0%, rgba(10,14,20,.62) 42%, rgba(10,14,20,.95) 100%);
+      }
+      .tint-chaos {
+        left: 0; top: 0; width: 1920px; height: 1080px;
+        background:
+          linear-gradient(180deg, rgba(10,14,20,.90) 0%, rgba(10,14,20,.18) 30%, rgba(10,14,20,.24) 55%, rgba(10,14,20,.96) 100%),
+          radial-gradient(circle at 72% 38%, rgba(239,68,68,.20), transparent 40%);
+      }
+      .scene { left: 0; top: 0; width: 1920px; height: 1080px; z-index: 10; }
+
+      /* ---------- shared chrome ---------- */
+      .topbar {
+        position: absolute; left: 72px; right: 72px; top: 40px;
+        display: flex; align-items: center; gap: 22px;
+        font-size: 19px; letter-spacing: .06em; color: var(--muted);
+        text-transform: uppercase; z-index: 3;
+      }
+      .brand { color: var(--fg); font-weight: 800; letter-spacing: .16em; }
+      .brand .dot { color: var(--cyan); }
+      .live { display: inline-flex; align-items: center; gap: 9px; color: #fca5a5; font-weight: 700; }
+      .live i { width: 9px; height: 9px; border-radius: 50%; background: var(--red); box-shadow: 0 0 14px var(--red); }
+      .topbar .meta { margin-left: auto; color: var(--muted); }
+
+      .scene-head {
+        position: absolute; left: 72px; right: 72px; top: 46px;
+        display: flex; align-items: baseline; gap: 18px; z-index: 3;
+      }
+      .scene-head .num {
+        font-family: var(--mono); font-size: 17px; letter-spacing: .2em;
+        color: var(--cyan); font-weight: 700;
+      }
+      .scene-head .label {
+        font-size: 17px; letter-spacing: .28em; text-transform: uppercase;
+        color: var(--fg); font-weight: 700;
+      }
+      .scene-head .right { margin-left: auto; font-family: var(--mono); font-size: 15px; color: var(--muted); letter-spacing: .1em; }
+
+      .caption {
+        font-size: 30px; line-height: 1.3; color: var(--fg);
+        font-weight: 500; letter-spacing: -0.01em; max-width: 1120px;
+      }
+      .caption b { color: var(--cyan); font-weight: 700; }
+
+      /* ---------- S1 hook ---------- */
+      .hook-panel {
+        position: absolute; left: 0; top: 0; width: 1120px; height: 1080px;
+        background: linear-gradient(90deg, rgba(10,14,20,.96) 0%, rgba(10,14,20,.86) 56%, rgba(10,14,20,0) 100%);
+        z-index: 1;
+      }
+      .hook-copy { position: absolute; left: 112px; top: 238px; width: 1250px; z-index: 2; }
+      .eyebrow {
+        font-family: var(--mono); font-size: 21px; letter-spacing: .24em;
+        text-transform: uppercase; font-weight: 700; margin-bottom: 26px;
+      }
+      .eyebrow.red { color: #fca5a5; }
+      .hook-line {
+        font-size: 104px; line-height: .98; letter-spacing: -0.055em;
+        font-weight: 900; color: var(--fg);
+      }
+      .hook-q {
+        margin-top: 14px; font-size: 132px; line-height: 1;
+        letter-spacing: -0.06em; font-weight: 900; color: var(--cyan);
+      }
+      .hook-foot {
+        position: absolute; left: 112px; bottom: 66px;
+        font-family: var(--mono); font-size: 19px; color: var(--muted);
+        letter-spacing: .02em; z-index: 2;
+      }
+      .hook-foot b { color: #fca5a5; font-weight: 500; }
+
+      /* ---------- S2 reveal ---------- */
+      .reveal-center { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; }
+      .wordmark {
+        font-size: 188px; line-height: .9; font-weight: 900; letter-spacing: -0.06em;
+        color: var(--fg); text-shadow: 0 0 70px rgba(34,211,238,.16);
+      }
+      .wordmark span { color: var(--cyan); }
+      .reveal-rule { width: 140px; height: 3px; background: var(--cyan); margin: 38px 0 34px; border-radius: 2px; }
+      .reveal-tag { font-size: 44px; line-height: 1.18; font-weight: 600; letter-spacing: -0.025em; color: var(--fg); }
+      .reveal-sub { margin-top: 24px; font-size: 24px; color: var(--muted); letter-spacing: .02em; }
+
+      /* ---------- S3 plan ---------- */
+      .bottom-panel {
+        position: absolute; left: 0; right: 0; bottom: 0; height: 470px;
+        background: linear-gradient(180deg, rgba(10,14,20,0) 0%, rgba(10,14,20,.72) 18%, rgba(10,14,20,.96) 38%, #0a0e14 62%, #0a0e14 100%);
+        z-index: 1;
+      }
+      .top-panel {
+        position: absolute; left: 0; right: 0; top: 0; height: 188px;
+        background: linear-gradient(180deg, #0a0e14 0%, #0a0e14 58%, rgba(10,14,20,.72) 84%, rgba(10,14,20,0) 100%);
+        z-index: 1;
+      }
+      .plan-bottom { position: absolute; left: 112px; right: 112px; bottom: 58px; z-index: 2; }
+      .ledger {
+        width: 1240px; background: rgba(9,13,19,.94);
+        border: 1px solid rgba(154,167,189,.18); border-radius: 14px;
+        overflow: hidden; box-shadow: 0 30px 80px rgba(0,0,0,.5);
+      }
+      .ledger-head {
+        display: flex; align-items: baseline; gap: 18px;
+        padding: 15px 22px; border-bottom: 1px solid rgba(154,167,189,.14);
+      }
+      .ledger-title {
+        font-family: var(--mono); font-size: 16px; letter-spacing: .2em;
+        text-transform: uppercase; font-weight: 700; color: var(--cyan);
+      }
+      .ledger-meta { margin-left: auto; font-family: var(--mono); font-size: 15px; color: var(--muted); letter-spacing: .06em; }
+      .lrow {
+        display: grid; grid-template-columns: 210px 1fr 268px 88px; gap: 16px;
+        padding: 10px 22px; font-family: var(--mono); font-size: 16px;
+        color: #cbd5e1; border-bottom: 1px solid rgba(154,167,189,.07);
+      }
+      .lrow.h {
+        color: var(--muted); font-size: 12px; letter-spacing: .16em;
+        text-transform: uppercase; padding-top: 12px; padding-bottom: 8px;
+      }
+      .lrow .conn { color: var(--cyan); }
+      .lrow .comp { color: var(--violet); }
+      .lrow .comp.warn { color: #fcd34d; }
+      .lrow .risk { text-align: right; color: var(--muted); }
+      .lrow .risk.high { color: #fca5a5; }
+      .ledger-foot {
+        padding: 11px 22px; font-family: var(--mono); font-size: 14px;
+        color: var(--muted); letter-spacing: .06em;
+      }
+      .plan-foot { display: flex; align-items: center; gap: 24px; margin-top: 20px; }
+      .plan-foot .caption { margin: 0; }
+      .stat-row { display: flex; gap: 56px; align-items: flex-end; margin-bottom: 26px; }
+      .stat { min-width: 150px; }
+      .stat b { display: block; font-size: 58px; line-height: 1; font-weight: 900; letter-spacing: -0.04em; color: var(--fg); }
+      .stat span { display: block; margin-top: 8px; font-family: var(--mono); font-size: 15px; letter-spacing: .18em; text-transform: uppercase; color: var(--muted); }
+      .pill {
+        display: inline-flex; align-items: center; gap: 10px;
+        padding: 10px 18px; border-radius: 999px;
+        font-family: var(--mono); font-size: 18px; letter-spacing: .12em; font-weight: 700;
+        border: 1px solid rgba(245,158,11,.45); background: rgba(120,53,15,.42); color: #fcd34d;
+      }
+      .plan-bottom .caption { margin-top: 22px; }
+
+      /* ---------- S4 execute ---------- */
+      .exec-top {
+        position: absolute; right: 112px; top: 150px; text-align: right; z-index: 2;
+        padding: 18px 26px 20px; border-radius: 14px;
+        background: rgba(10,14,20,.88); border: 1px solid rgba(34,197,94,.24);
+        box-shadow: 0 24px 70px rgba(0,0,0,.5);
+      }
+      .exec-top .big { font-size: 84px; line-height: .95; font-weight: 900; letter-spacing: -0.05em; color: var(--green); }
+      .exec-top .small { margin-top: 12px; font-family: var(--mono); font-size: 15px; letter-spacing: .16em; text-transform: uppercase; color: var(--muted); }
+      .exec-bottom { position: absolute; left: 112px; right: 112px; bottom: 62px; z-index: 2; }
+      .bar { height: 6px; background: rgba(154,167,189,.22); border-radius: 99px; overflow: hidden; margin: 22px 0 26px; }
+      .bar > i { display: block; height: 100%; width: 100%; background: linear-gradient(90deg, var(--cyan), var(--green)); border-radius: 99px; transform-origin: left center; }
+
+      /* ---------- S5 chaos ---------- */
+      .chaos-alert {
+        position: absolute; right: 112px; top: 156px;
+        padding: 14px 22px; border-radius: 10px;
+        background: rgba(127,29,29,.72); border: 1px solid rgba(239,68,68,.55);
+        font-family: var(--mono); font-size: 17px; letter-spacing: .08em; color: #fecaca;
+        box-shadow: 0 0 40px rgba(239,68,68,.18); z-index: 2;
+      }
+      .chaos-bottom { position: absolute; left: 112px; right: 112px; bottom: 62px; z-index: 2; }
+      .chips { display: flex; align-items: center; gap: 16px; margin-bottom: 22px; }
+      .chip {
+        padding: 12px 20px; border-radius: 10px; font-family: var(--mono);
+        font-size: 18px; letter-spacing: .08em; font-weight: 700; border: 1px solid var(--bg2);
+      }
+      .chip.red { color: #fca5a5; background: rgba(127,29,29,.45); border-color: rgba(239,68,68,.45); }
+      .chip.violet { color: #ddd6fe; background: rgba(76,29,149,.42); border-color: rgba(167,139,250,.45); }
+      .chip.gray { color: var(--muted); background: rgba(100,116,139,.18); border-color: rgba(100,116,139,.35); }
+      .chip-arrow { color: var(--muted); font-size: 20px; }
+
+      /* ---------- S6 recovery ---------- */
+      .rec-bottom { position: absolute; left: 112px; right: 112px; bottom: 62px; z-index: 2; }
+      .rec-stats { display: flex; gap: 64px; margin-bottom: 22px; }
+      .rec-stat b { display: block; font-size: 66px; line-height: 1; font-weight: 900; letter-spacing: -0.05em; color: var(--fg); }
+      .rec-stat b.green { color: var(--green); }
+      .rec-stat span { display: block; margin-top: 9px; font-family: var(--mono); font-size: 15px; letter-spacing: .16em; text-transform: uppercase; color: var(--muted); }
+
+      /* ---------- S7 evidence ---------- */
+      .valid-pill {
+        position: absolute; right: 112px; top: 156px;
+        padding: 13px 20px; border-radius: 10px;
+        font-family: var(--mono); font-size: 16px; letter-spacing: .14em; font-weight: 700;
+        color: #86efac; background: rgba(20,83,45,.55); border: 1px solid rgba(34,197,94,.5);
+        box-shadow: 0 0 40px rgba(34,197,94,.16); z-index: 2;
+      }
+      .term {
+        position: absolute; left: 112px; bottom: 62px; width: 1350px;
+        background: rgba(5,10,15,.94); border: 1px solid var(--bg2); border-radius: 14px;
+        box-shadow: 0 30px 80px rgba(0,0,0,.55); overflow: hidden; z-index: 2;
+      }
+      .term-head {
+        display: flex; align-items: center; gap: 10px; padding: 14px 18px;
+        border-bottom: 1px solid var(--bg2); font-family: var(--mono);
+        font-size: 14px; letter-spacing: .14em; text-transform: uppercase; color: var(--muted);
+      }
+      .term-head i { width: 10px; height: 10px; border-radius: 50%; background: var(--red); display: inline-block; }
+      .term-head i.g { background: var(--amber); }
+      .term-head i.b { background: var(--green); }
+      .term-body { padding: 20px 22px 24px; font-family: var(--mono); font-size: 21px; line-height: 1.55; }
+      .term-line { color: #cbd5e1; white-space: nowrap; }
+      .term-line .prompt { color: var(--cyan); }
+      .term-out { margin-top: 12px; color: #86efac; white-space: nowrap; }
+
+      /* ---------- S8 outro ---------- */
+      .outro-center { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; }
+      .wordmark.big { font-size: 214px; }
+      .outro-cta {
+        margin-top: 40px; font-family: var(--mono); font-size: 26px; letter-spacing: .06em;
+        color: var(--cyan); padding: 12px 24px; border: 1px solid rgba(34,211,238,.35);
+        border-radius: 999px; background: rgba(34,211,238,.07);
+      }
+      .outro-sub { margin-top: 34px; font-size: 21px; color: var(--muted); letter-spacing: .04em; }
+      .outro-rule { width: 90px; height: 2px; background: rgba(34,211,238,.55); margin: 34px 0 0; }
+    </style>
+  </head>
+  <body>
+    <div
+      id="root"
+      data-composition-id="main"
+      data-start="0"
+      data-duration="50.4"
+      data-width="1920"
+      data-height="1080"
+    >
+      <!-- background -->
+      <div id="bg" aria-hidden="true">
+        <div class="grid" data-layout-ignore></div>
+        <div class="glow glow-a" data-layout-ignore></div>
+        <div class="glow glow-b" data-layout-ignore></div>
+      </div>
+
+      <!-- ============ S1 HOOK : 0.0 - 6.0 ============ -->
+      <video id="v-hook" class="clip media" data-start="0" data-duration="6" data-track-index="1" muted playsinline src="assets/clips/s4-chaos.mp4"></video>
+      <div id="hook-tint" class="clip tint-hook" data-start="0" data-duration="6" data-track-index="2"></div>
+      <div id="hook" class="clip scene" data-start="0" data-duration="6" data-track-index="3">
+        <div class="topbar">
+          <span class="brand">REVERSA<span class="dot">.</span></span>
+          <span class="live"><i></i> Live incident</span>
+          <span class="meta">Vultr · Paris</span>
+        </div>
+        <div class="hook-panel"></div>
+        <div class="hook-copy">
+          <div class="eyebrow red">Step 6 of 10 failed</div>
+          <h1 class="hook-line">Half-onboarded<br/>customer.</h1>
+          <div class="hook-q">Now what?</div>
+        </div>
+        <div class="hook-foot"><b>billing.create_profile</b> · HTTP 500 · dependents blocked</div>
+      </div>
+
+      <!-- ============ S2 REVEAL : 6.0 - 11.0 ============ -->
+      <img id="reveal-bg" class="clip media dim" data-start="6" data-duration="5" data-track-index="4" src="assets/img/command-done.png" alt="" />
+      <div id="reveal" class="clip scene" data-start="6" data-duration="5" data-track-index="5">
+        <div class="reveal-center">
+          <div class="wordmark">REVERSA<span>.</span></div>
+          <div class="reveal-rule"></div>
+          <div class="reveal-tag">Reversible where possible.<br/>Accountable everywhere.</div>
+          <div class="reveal-sub">The recovery control plane for enterprise AI operations.</div>
+        </div>
+      </div>
+
+      <!-- ============ S3 PLAN : 11.0 - 18.2 ============ -->
+      <video id="v-plan" class="clip media" data-start="11" data-duration="7.2" data-track-index="6" data-media-start="8.0" muted playsinline src="assets/clips/s2-plan.mp4"></video>
+      <div id="plan-shade" class="clip shade" data-start="11" data-duration="7.2" data-track-index="7"></div>
+      <div id="plan" class="clip scene" data-start="11" data-duration="7.2" data-track-index="8">
+        <div class="top-panel"></div>
+        <div class="scene-head">
+          <span class="num">01</span>
+          <span class="label">Plan</span>
+          <span class="right">shadow preview</span>
+        </div>
+        <div class="bottom-panel"></div>
+        <div class="plan-bottom">
+          <div class="ledger">
+            <div class="ledger-head">
+              <span class="ledger-title">Shadow preview</span>
+              <span class="ledger-meta">10 steps · 5 systems · 1 approval gate</span>
+            </div>
+            <div class="lrow h"><span>connector</span><span>declared effect</span><span>compensation</span><span class="risk">risk</span></div>
+            <div class="lrow"><span class="conn">demo-crm</span><span>validate_customer</span><span class="comp">COMPENSATABLE</span><span class="risk">low</span></div>
+            <div class="lrow"><span class="conn">demo-crm</span><span>+ crm organization</span><span class="comp">COMPENSATABLE</span><span class="risk">medium</span></div>
+            <div class="lrow"><span class="conn">demo-identity</span><span>+ identity workspace</span><span class="comp">FULLY_REVERSIBLE</span><span class="risk">medium</span></div>
+            <div class="lrow"><span class="conn">demo-support</span><span>+ support queue</span><span class="comp">COMPENSATABLE</span><span class="risk">low</span></div>
+            <div class="lrow"><span class="conn">demo-billing</span><span>+ billing profile (no real charge)</span><span class="comp warn">CONDITIONALLY_REVERSIBLE</span><span class="risk high">high</span></div>
+            <div class="ledger-foot">+ 5 more steps · plan hash 3061d315… · nothing executed yet</div>
+          </div>
+          <div class="plan-foot">
+            <div id="plan-pill" class="pill">AWAITING_APPROVAL</div>
+            <div class="caption">Every effect shown <b>before</b> execution.</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ============ S4 EXECUTE : 18.2 - 24.6 ============ -->
+      <video id="v-exec" class="clip media" data-start="18.2" data-duration="6.4" data-track-index="9" data-media-start="5.4" muted playsinline src="assets/clips/s3-execution.mp4"></video>
+      <div id="exec-shade" class="clip shade" data-start="18.2" data-duration="6.4" data-track-index="10"></div>
+      <div id="exec" class="clip scene" data-start="18.2" data-duration="6.4" data-track-index="11">
+        <div class="top-panel"></div>
+        <div class="scene-head">
+          <span class="num">02</span>
+          <span class="label">Execute</span>
+          <span class="right">live run</span>
+        </div>
+        <div class="exec-top">
+          <div class="big"><span id="exec-verified">0</span>/10</div>
+          <div class="small">verified</div>
+        </div>
+        <div class="bottom-panel"></div>
+        <div class="exec-bottom">
+          <div class="caption"><b><span id="exec-events">0</span> events</b> sealed in the passport.</div>
+          <div class="bar"><i id="exec-bar"></i></div>
+          <div class="caption">Executed. Verified. Accountable.</div>
+        </div>
+      </div>
+
+      <!-- ============ S5 CHAOS : 24.6 - 31.7 ============ -->
+      <video id="v-chaos" class="clip media" data-start="24.6" data-duration="7.1" data-track-index="12" data-media-start="0.5" muted playsinline src="assets/clips/s4-chaos.mp4"></video>
+      <div id="chaos-tint" class="clip tint-chaos" data-start="24.6" data-duration="7.1" data-track-index="13"></div>
+      <div id="chaos" class="clip scene" data-start="24.6" data-duration="7.1" data-track-index="14">
+        <div class="top-panel"></div>
+        <div class="scene-head">
+          <span class="num">03</span>
+          <span class="label">Chaos</span>
+          <span class="right">failure injected</span>
+        </div>
+        <div id="chaos-alert" class="chaos-alert">BILLING · HTTP 500</div>
+        <div class="bottom-panel"></div>
+        <div class="chaos-bottom">
+          <div class="chips">
+            <div id="chip-fail" class="chip red">6 FAILED</div>
+            <div class="chip-arrow">→</div>
+            <div id="chip-comp" class="chip violet">7 COMPENSATED</div>
+            <div class="chip-arrow">→</div>
+            <div id="chip-skip" class="chip gray">2 SKIPPED</div>
+          </div>
+          <div class="caption">Dependents blocked. <b>Reverse order.</b> Typed compensation.</div>
+        </div>
+      </div>
+
+      <!-- ============ S6 RECOVERY : 31.7 - 38.6 ============ -->
+      <video id="v-recovery" class="clip media" data-start="31.7" data-duration="6.9" data-track-index="15" data-media-start="0.4" muted playsinline src="assets/clips/s5-recovery.mp4"></video>
+      <div id="recovery-shade" class="clip shade" data-start="31.7" data-duration="6.9" data-track-index="16"></div>
+      <div id="recovery" class="clip scene" data-start="31.7" data-duration="6.9" data-track-index="17">
+        <div class="top-panel"></div>
+        <div class="scene-head">
+          <span class="num">04</span>
+          <span class="label">Recover</span>
+          <span class="right">final state verified</span>
+        </div>
+        <div class="bottom-panel"></div>
+        <div class="rec-bottom">
+          <div class="rec-stats">
+            <div class="rec-stat"><b class="green">0</b><span>workspace left</span></div>
+            <div class="rec-stat"><b>4</b><span>users archived</span></div>
+            <div class="rec-stat"><b id="rec-events">0</b><span>events</span></div>
+          </div>
+          <div class="caption">No orphaned state. <b>No manual cleanup.</b></div>
+        </div>
+      </div>
+
+      <!-- ============ S7 EVIDENCE : 38.6 - 44.4 ============ -->
+      <video id="v-evidence" class="clip media" data-start="38.6" data-duration="5.8" data-track-index="18" data-media-start="0.4" muted playsinline src="assets/clips/s6-evidence.mp4"></video>
+      <div id="evidence-shade" class="clip shade" data-start="38.6" data-duration="5.8" data-track-index="19"></div>
+      <div id="evidence" class="clip scene" data-start="38.6" data-duration="5.8" data-track-index="20">
+        <div class="top-panel"></div>
+        <div class="scene-head">
+          <span class="num">05</span>
+          <span class="label">Evidence</span>
+          <span class="right">offline verifier</span>
+        </div>
+        <div id="valid-pill" class="valid-pill">CHAIN VALID</div>
+        <div class="bottom-panel"></div>
+        <div id="term" class="term">
+          <div class="term-head"><i></i><i class="g"></i><i class="b"></i> verify-evidence</div>
+          <div class="term-body">
+            <div class="term-line"><span class="prompt">$</span> python -m reversa_api.cli verify export.json</div>
+            <div id="cli-out" class="term-out">VALID: offline chain valid (81 events recomputed)</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ============ S8 OUTRO : 44.4 - 50.4 ============ -->
+      <div id="outro" class="clip scene" data-start="44.4" data-duration="6" data-track-index="21">
+        <div class="outro-center">
+          <div class="wordmark big">REVERSA<span>.</span></div>
+          <div class="reveal-rule"></div>
+          <div class="reveal-tag">Reversible where possible. Accountable everywhere.</div>
+          <div class="outro-cta">217.69.7.155.nip.io</div>
+          <div class="outro-sub">Challenge 2 · Powering the Future of Work · Built on Vultr Cloud Compute</div>
+        </div>
+      </div>
+
+      <!-- ============ AUDIO ============ -->
+      <audio id="music" data-start="0" data-duration="50.4" data-track-index="30" data-volume="0.08" data-fade-in="0.8" data-fade-out="2" src="assets/music/happy-beats-business-moves-vol-12-by-ende-dot-app.mp3"></audio>
+
+      <audio id="vo-1" data-start="0.2" data-duration="5.201" data-track-index="40" data-volume="1" src="assets/vo/vo-1-hook.mp3"></audio>
+      <audio id="vo-2" data-start="6.2" data-duration="4.272" data-track-index="41" data-volume="1" src="assets/vo/vo-2-reveal.mp3"></audio>
+      <audio id="vo-3" data-start="11.2" data-duration="6.084" data-track-index="42" data-volume="1" src="assets/vo/vo-3-plan.mp3"></audio>
+      <audio id="vo-4" data-start="18.4" data-duration="5.201" data-track-index="43" data-volume="1" src="assets/vo/vo-4-execute.mp3"></audio>
+      <audio id="vo-5" data-start="24.8" data-duration="5.898" data-track-index="44" data-volume="1" src="assets/vo/vo-5-chaos.mp3"></audio>
+      <audio id="vo-6" data-start="31.9" data-duration="5.666" data-track-index="45" data-volume="1" src="assets/vo/vo-6-recovery.mp3"></audio>
+      <audio id="vo-7" data-start="38.8" data-duration="4.365" data-track-index="46" data-volume="1" src="assets/vo/vo-7-evidence.mp3"></audio>
+      <audio id="vo-8" data-start="44.6" data-duration="5.062" data-track-index="47" data-volume="1" src="assets/vo/vo-8-outro.mp3"></audio>
+
+      <audio id="sfx-1" data-start="0.05" data-duration="0.505" data-track-index="50" data-volume="0.455" src="assets/sfx/impactSoft_heavy_000.ogg"></audio>
+      <audio id="sfx-2" data-start="2.15" data-duration="0.5" data-track-index="51" data-volume="0.385" src="assets/sfx/error_005.ogg"></audio>
+      <audio id="sfx-3" data-start="6.0" data-duration="0.123" data-track-index="52" data-volume="0.42" src="assets/sfx/bong_001.ogg"></audio>
+      <audio id="sfx-4" data-start="11.0" data-duration="0.1" data-track-index="53" data-volume="0.35" src="assets/sfx/click_001.ogg"></audio>
+      <audio id="sfx-5" data-start="11.5" data-duration="0.11" data-track-index="54" data-volume="0.35" src="assets/sfx/drop_001.ogg"></audio>
+      <audio id="sfx-6" data-start="18.2" data-duration="0.287" data-track-index="55" data-volume="0.35" src="assets/sfx/chips-stack-1.ogg"></audio>
+      <audio id="sfx-7" data-start="23.3" data-duration="0.654" data-track-index="56" data-volume="0.385" src="assets/sfx/impactBell_heavy_003.ogg"></audio>
+      <audio id="sfx-8" data-start="24.6" data-duration="0.5" data-track-index="57" data-volume="0.455" src="assets/sfx/error_006.ogg"></audio>
+      <audio id="sfx-9" data-start="25.4" data-duration="0.405" data-track-index="58" data-volume="0.385" src="assets/sfx/impactPunch_medium_001.ogg"></audio>
+      <audio id="sfx-10" data-start="31.7" data-duration="0.183" data-track-index="59" data-volume="0.42" src="assets/sfx/impactSoft_medium_001.ogg"></audio>
+      <audio id="sfx-11" data-start="38.6" data-duration="0.11" data-track-index="60" data-volume="0.385" src="assets/sfx/drop_001.ogg"></audio>
+      <audio id="sfx-12" data-start="42.2" data-duration="0.259" data-track-index="61" data-volume="0.42" src="assets/sfx/chips-collide-1.ogg"></audio>
+      <audio id="sfx-13" data-start="44.4" data-duration="1.48" data-track-index="62" data-volume="0.49" src="assets/sfx/impactBell_heavy_000.ogg"></audio>
+    </div>
+
+    <script>
+      const tl = gsap.timeline({ paused: true });
+
+      // ---------- global drift ----------
+      tl.fromTo("#bg .glow-a", { scale: 1, opacity: 0.24 }, { scale: 1.18, opacity: 0.36, duration: 50.4, ease: "none" }, 0);
+      tl.fromTo("#bg .glow-b", { scale: 1.1, opacity: 0.28 }, { scale: 0.94, opacity: 0.4, duration: 50.4, ease: "none" }, 0);
+
+      // ---------- S1 hook ----------
+      tl.fromTo("#hook-tint", { opacity: 0 }, { opacity: 1, duration: 0.5, ease: "power2.out" }, 0);
+      tl.fromTo("#hook .eyebrow", { opacity: 0, y: 24, filter: "blur(8px)" }, { opacity: 1, y: 0, filter: "blur(0px)", duration: 0.5, ease: "power4.out" }, 0.18);
+      tl.fromTo("#hook .hook-line", { opacity: 0, y: 44, filter: "blur(12px)" }, { opacity: 1, y: 0, filter: "blur(0px)", duration: 0.7, ease: "power4.out" }, 0.32);
+      tl.fromTo("#hook .hook-q", { opacity: 0, scale: 1.22, filter: "blur(10px)" }, { opacity: 1, scale: 1, filter: "blur(0px)", duration: 0.55, ease: "back.out(1.6)" }, 2.15);
+      tl.fromTo("#hook .hook-foot", { opacity: 0, y: 16 }, { opacity: 1, y: 0, duration: 0.45, ease: "power2.out" }, 3.0);
+      tl.to("#hook .hook-q", { color: "#fca5a5", duration: 0.4, ease: "power1.in" }, 4.6);
+
+      // ---------- S2 reveal ----------
+      tl.fromTo("#reveal-bg", { opacity: 0, scale: 1.06 }, { opacity: 0.16, scale: 1, duration: 1.2, ease: "power2.out" }, 6.0);
+      tl.fromTo("#reveal .wordmark", { opacity: 0, scale: 0.94, filter: "blur(16px)" }, { opacity: 1, scale: 1, filter: "blur(0px)", duration: 0.7, ease: "power4.out" }, 6.15);
+      tl.fromTo("#reveal .reveal-rule", { width: 0, opacity: 0 }, { width: 140, opacity: 1, duration: 0.55, ease: "power3.out" }, 6.62);
+      tl.fromTo("#reveal .reveal-tag", { opacity: 0, y: 24 }, { opacity: 1, y: 0, duration: 0.6, ease: "power3.out" }, 6.78);
+      tl.fromTo("#reveal .reveal-sub", { opacity: 0, y: 16 }, { opacity: 1, y: 0, duration: 0.55, ease: "power3.out" }, 7.1);
+
+      // ---------- S3 plan ----------
+      tl.fromTo("#plan-shade", { opacity: 0 }, { opacity: 1, duration: 0.6, ease: "power2.out" }, 11.0);
+      tl.fromTo("#plan .scene-head", { opacity: 0, y: -18 }, { opacity: 1, y: 0, duration: 0.45, ease: "power3.out" }, 11.05);
+      tl.fromTo("#plan .ledger-head", { opacity: 0, y: 20 }, { opacity: 1, y: 0, duration: 0.45, ease: "power3.out" }, 11.2);
+      tl.fromTo("#plan .lrow", { opacity: 0, y: 16 }, { opacity: 1, y: 0, duration: 0.34, stagger: 0.09, ease: "power2.out" }, 11.3);
+      tl.fromTo("#plan .ledger-foot", { opacity: 0 }, { opacity: 1, duration: 0.4, ease: "power2.out" }, 12.0);
+      tl.fromTo("#plan-pill", { opacity: 0, scale: 0.86 }, { opacity: 1, scale: 1, duration: 0.45, ease: "back.out(1.8)" }, 12.1);
+      tl.fromTo("#plan .plan-foot .caption", { opacity: 0, y: 18 }, { opacity: 1, y: 0, duration: 0.5, ease: "power2.out" }, 12.35);
+
+      // ---------- S4 execute ----------
+      tl.fromTo("#exec-shade", { opacity: 0 }, { opacity: 1, duration: 0.5, ease: "power2.out" }, 18.2);
+      tl.fromTo("#exec .scene-head", { opacity: 0, y: -18 }, { opacity: 1, y: 0, duration: 0.45, ease: "power3.out" }, 18.25);
+      tl.fromTo("#exec .exec-top", { opacity: 0, x: 30 }, { opacity: 1, x: 0, duration: 0.55, ease: "power3.out" }, 18.4);
+      var execCounter = { v: 0 };
+      tl.to(execCounter, { v: 10, duration: 1.0, ease: "power2.out", onUpdate: function () { document.getElementById("exec-verified").textContent = Math.round(execCounter.v); } }, 18.55);
+      var eventCounter = { v: 0 };
+      tl.to(eventCounter, { v: 59, duration: 1.3, ease: "power2.out", onUpdate: function () { document.getElementById("exec-events").textContent = Math.round(eventCounter.v); } }, 18.8);
+      tl.fromTo("#exec-bar", { scaleX: 0 }, { scaleX: 1, duration: 1.7, ease: "power2.inOut" }, 18.9);
+      tl.fromTo("#exec .exec-bottom", { opacity: 0, y: 20 }, { opacity: 1, y: 0, duration: 0.55, ease: "power3.out" }, 18.7);
+
+      // ---------- S5 chaos ----------
+      tl.fromTo("#chaos-tint", { opacity: 0 }, { opacity: 1, duration: 0.5, ease: "power2.out" }, 24.6);
+      tl.fromTo("#chaos .scene-head", { opacity: 0, y: -18 }, { opacity: 1, y: 0, duration: 0.45, ease: "power3.out" }, 24.65);
+      tl.fromTo("#chaos-alert", { opacity: 0, x: 40 }, { opacity: 1, x: 0, duration: 0.45, ease: "back.out(1.6)" }, 24.85);
+      tl.fromTo("#chip-fail", { opacity: 0, y: 20, scale: 0.9 }, { opacity: 1, y: 0, scale: 1, duration: 0.38, ease: "back.out(1.8)" }, 25.35);
+      tl.fromTo("#chip-comp", { opacity: 0, y: 20, scale: 0.9 }, { opacity: 1, y: 0, scale: 1, duration: 0.38, ease: "back.out(1.8)" }, 26.15);
+      tl.fromTo("#chip-skip", { opacity: 0, y: 20, scale: 0.9 }, { opacity: 1, y: 0, scale: 1, duration: 0.38, ease: "back.out(1.8)" }, 26.85);
+      tl.fromTo("#chaos .chaos-bottom .caption", { opacity: 0, y: 18 }, { opacity: 1, y: 0, duration: 0.5, ease: "power2.out" }, 27.25);
+
+      // ---------- S6 recovery ----------
+      tl.fromTo("#recovery-shade", { opacity: 0 }, { opacity: 1, duration: 0.5, ease: "power2.out" }, 31.7);
+      tl.fromTo("#recovery .scene-head", { opacity: 0, y: -18 }, { opacity: 1, y: 0, duration: 0.45, ease: "power3.out" }, 31.75);
+      tl.fromTo("#recovery .rec-stat", { opacity: 0, y: 26 }, { opacity: 1, y: 0, duration: 0.5, stagger: 0.12, ease: "power3.out" }, 31.95);
+      var recCounter = { v: 0 };
+      tl.to(recCounter, { v: 81, duration: 1.2, ease: "power2.out", onUpdate: function () { document.getElementById("rec-events").textContent = Math.round(recCounter.v); } }, 32.1);
+      tl.fromTo("#recovery .rec-bottom .caption", { opacity: 0, y: 18 }, { opacity: 1, y: 0, duration: 0.5, ease: "power2.out" }, 32.8);
+
+      // ---------- S7 evidence ----------
+      tl.fromTo("#evidence-shade", { opacity: 0 }, { opacity: 1, duration: 0.5, ease: "power2.out" }, 38.6);
+      tl.fromTo("#evidence .scene-head", { opacity: 0, y: -18 }, { opacity: 1, y: 0, duration: 0.45, ease: "power3.out" }, 38.65);
+      tl.fromTo("#valid-pill", { opacity: 0, scale: 0.85 }, { opacity: 1, scale: 1, duration: 0.4, ease: "back.out(1.8)" }, 41.6);
+      tl.fromTo("#term", { opacity: 0, y: 34 }, { opacity: 1, y: 0, duration: 0.55, ease: "power3.out" }, 38.95);
+      tl.fromTo("#cli-out", { clipPath: "inset(0 100% 0 0)" }, { clipPath: "inset(0 0% 0 0)", duration: 1.15, ease: "steps(30)" }, 39.6);
+
+      // ---------- S8 outro ----------
+      tl.fromTo("#outro .wordmark", { opacity: 0, scale: 0.94, filter: "blur(14px)" }, { opacity: 1, scale: 1, filter: "blur(0px)", duration: 0.65, ease: "power4.out" }, 44.5);
+      tl.fromTo("#outro .reveal-rule", { width: 0, opacity: 0 }, { width: 90, opacity: 1, duration: 0.5, ease: "power3.out" }, 44.95);
+      tl.fromTo("#outro .reveal-tag", { opacity: 0, y: 22 }, { opacity: 1, y: 0, duration: 0.55, ease: "power3.out" }, 45.05);
+      tl.fromTo("#outro .outro-cta", { opacity: 0, y: 18 }, { opacity: 1, y: 0, duration: 0.5, ease: "power3.out" }, 45.55);
+      tl.fromTo("#outro .outro-sub", { opacity: 0, y: 14 }, { opacity: 1, y: 0, duration: 0.5, ease: "power3.out" }, 45.85);
+
+      window.__timelines["main"] = tl;
+      tl.seek(0);
+    </script>
+  </body>
+</html>

@@ -110,7 +110,8 @@ Single-model planner; A/B n=12 only; concurrency N=1/5/10 loopback only
 `since_seq`); one VM = SPOF (pre-deploy backup taken; restore TESTED on
 RC7, RC10 restore test not run; snapshot taken); no exactly-once on external
 systems; hash chain detects tampering, not absolute immutability; demo
-systems labeled; `?view=shared` internal-only (8 redactions); V2 video ships
-(V3 storyboard only); wf41 read-only classified, left in place by design.
+systems labeled; `?view=shared` internal-only (8 redactions); V3 video ships
+(50.4 s, EN narration, `demo-v3.mp4`; V2 kept as fallback); wf41 read-only
+classified, left in place by design.
 
 Full dossier: `docs/jury/` (01–18). Numbers: RC10, 2026-11-06.

@@ -92,7 +92,20 @@
 - Reste (humain requis): soumission LabLab — voir
   `docs/jury/SUBMISSION-ACTION-REQUIRED.md`. VM allumée.
 
-## 2026-11-06 � V11 (docs+verification, pas de RC11)
+## 2026-11-06 — V11 (docs+verification, pas de RC11)
 
 - HEAD 999921a, CI 42160877427 verte. R12: 1 ligne token (jury/org1); rotation post-soumission. Board 57 soumissions, ARC seul rival C2.
 - NOUVEAU: beachhead+ROI, value prop, jury sim, rapport 20. Business 7->8. Video V2 reste l'asset (V3 NO-GO).
+
+## 2026-11-06 - V3 jury video (brag + HyperFrames + ElevenLabs)
+
+- Rebuild demande par le owner via le skill `/brag` (latent-spaces/brag)
+  sur HyperFrames 0.9.19, voix ElevenLabs EN (Matilda, multilingual_v2).
+- Livre `docs/jury/demo-v3.mp4` : 50.4 s, 1920x1080, 30 fps, h264 + AAC
+  stereo, 9,329,098 B ; `docs/jury/demo-v3.srt` 8 cues (fin 49.66 s).
+- 8 scenes : hook chaos / reveal / plan ledger (10 steps, 5 systems, 1
+  approval gate) / execute (10/10, 59 events) / chaos (6 failed, 7
+  compensated, 2 skipped) / recover (0 workspace, 4 users, 81 events) /
+  evidence (CLI offline VALID 81 events) / outro.
+- `hyperframes check` ok=true, 0 erreur ; source conservee dans
+  `docs/jury/video-v3-source/`. `demo-v2.mp4` reste en repli.

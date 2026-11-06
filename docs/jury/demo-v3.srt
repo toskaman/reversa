@@ -1,0 +1,42 @@
+1
+00:00:00,200 --> 00:00:05,400
+Your AI just onboarded half a customer.
+Then billing died. Who undoes the other five?
+
+2
+00:00:06,200 --> 00:00:10,470
+REVERSA is the recovery control plane
+for enterprise AI operations.
+
+3
+00:00:11,200 --> 00:00:17,280
+It plans across five systems, shows every
+effect before execution, and waits for your
+approval.
+
+4
+00:00:18,400 --> 00:00:23,600
+Every action is executed, verified, and sealed
+in a hash-chained evidence passport.
+
+5
+00:00:24,800 --> 00:00:30,700
+When step six fails, dependents are blocked,
+and seven effects are compensated in reverse
+order.
+
+6
+00:00:31,900 --> 00:00:37,570
+No orphaned state. No hand-wavy logs.
+Just a verifiable proof you can check offline.
+
+7
+00:00:38,800 --> 00:00:43,170
+One command verifies the chain offline.
+Eighty-one events. Valid.
+
+8
+00:00:44,600 --> 00:00:49,660
+REVERSA. Built on Vultr.
+Reversible where possible. Accountable
+everywhere.

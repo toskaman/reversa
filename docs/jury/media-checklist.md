@@ -139,3 +139,39 @@ No media rebuild performed, no secrets found, no false claims found.
 
 *AGENT-19 - REVERSA V2 cycle 4 (Final Ascent) - Media Auditor -
 2026-11-05. This file is the audit's only deliverable.*
+
+---
+
+## 11. V3 rebuild - brag + HyperFrames + ElevenLabs (2026-11-06)
+
+Supersedes V2 as the LabLab upload. V2 stays in place as fallback.
+
+Observed with ffprobe/ffmpeg on `docs/jury/demo-v3.mp4`:
+
+- Size 9,326,695 B; container duration 50.400 s
+- Video h264, 1920x1080, 30 fps, ~1.28 Mb/s
+- Audio AAC, stereo, 48,000 Hz, 192 kb/s; mean_volume -20.1 dB,
+  max_volume -1.5 dB; integrated loudness -16.2 LUFS, true peak -1.4 dBTP
+  (voiceover ~8 dB above the music bed)
+- Subtitles `docs/jury/demo-v3.srt`, 8 cues, last cue ends 00:00:49,660
+- Scene order: hook (chaos clip) / reveal / plan ledger / execute (59
+  events, 10/10 verified) / chaos (6 failed, 7 compensated, 2 skipped) /
+  recovery (0 workspaces left, 4 users archived, 81 events) / evidence
+  (offline verify, 81 events) / outro (URL + challenge line)
+- Every figure is taken from `docs/jury/v2-clips` captures. The CLI
+  line was reproduced this run:
+  `python -m reversa_api.cli verify docs/jury/v2-clips/s6-evidence-chaos.json`
+  -> `VALID: offline chain valid (81 events recomputed)` (exit 0)
+- Build: `/brag` plan + HyperFrames 0.9.19 composition, rendered
+  locally (6 workers, screenshot capture), then mastered to -16 LUFS
+  (linear gain + limiter, video stream copied). `hyperframes check`
+  reports `ok: true`, 0 errors, 8 nested-structure lint warnings and 1
+  type-floor craft warning (intentional HUD micro-labels).
+- Voice: ElevenLabs `eleven_multilingual_v2`, voice
+  `XrExE9yKIg1WjnnlVkGX` (Matilda), English, 8 lines.
+- Music: Sascha Ende, CC BY 4.0; SFX Kenney.nl, CC0.
+- Source kept for reproducibility: `docs/jury/video-v3-source/`.
+- Secret scan: no `rev_`/Bearer/key material in the MP4 or the SRT.
+
+Verdict: `demo-v3.mp4` SHIP-READY as the LabLab upload;
+`demo-v2.mp4` remains a valid fallback.

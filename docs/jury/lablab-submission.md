@@ -66,7 +66,7 @@ saga, self-healing, vultr, workflows
 
 - Demo: https://217.69.7.155.nip.io
 - Code: https://github.com/toskaman/reversa
-- Video: (upload docs/jury/demo-v2.mp4 — 85 s narrated, 6 scenes, SRT included; v1 demo.mp4 kept as fallback)
+- Video: (upload docs/jury/demo-v3.mp4 — 50 s, 1920x1080, English ElevenLabs narration, 8 scenes, SRT at docs/jury/demo-v3.srt; demo-v2.mp4 kept as fallback)
 - Slides: docs/jury/slides.pdf (source: docs/jury/build_slides.py + slides.md)
 - Cover: docs/jury/cover-16x9.png (16:9, 1280x720); cover.png is a portrait duplicate of gallery/workflow.png, do not use as cover
 - Gallery: docs/jury/gallery/ (12 authentic captures, incl. 4 agentic flows)
