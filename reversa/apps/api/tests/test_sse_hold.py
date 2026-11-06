@@ -98,15 +98,10 @@ def test_consumed_stream_releases_slot(client, demo_auth):
     assert wf_routes._SSE_OPEN_STREAMS == 0
 
 
-@pytest.mark.xfail(
-    reason="V8: slot opened in route body (workflows.py:624) is released "
-    "only inside gen()'s finally (:667-668); close() on a never-started "
-    "generator is a CPython no-op, and Starlette 1.10.0 never closes the "
-    "sync iterator — the slot leaks. RC10 fix: deterministic close.",
-    strict=True,
-)
 def test_unstarted_stream_response_releases_slot(client, demo_auth):
-    """V8: dropping a stream response before first yield must not leak.
+    """V9 (was V8 strict-xfail): dropping a stream response before first
+    yield must not leak — fixed by the idempotent lease + response
+    finalizer in workflows.py.
 
     Calls the real route, drops the StreamingResponse without iterating
     (response-start failure / middleware short-circuit shape), forces GC,
@@ -126,3 +121,53 @@ def test_unstarted_stream_response_releases_slot(client, demo_auth):
         assert wf_routes._SSE_OPEN_STREAMS == 0
     finally:
         wf_routes.reset_sse_stream_state()
+
+
+def _direct_stream(client, demo_auth):
+    """Call the real route and return the unconsumed response."""
+    wf_id = _nonterminal_wf(client, demo_auth)
+    authz = demo_auth["headers"]["Authorization"]
+    scope = {"type": "http",
+             "headers": [(b"authorization", authz.encode("latin-1"))]}
+    return wf_routes.stream_events(wf_id, Request(scope))
+
+
+def test_abandoned_stream_does_not_block_next_admission(client, demo_auth,
+                                                        monkeypatch):
+    """V9: abandon one stream at cap 1, the next admission succeeds."""
+    monkeypatch.setattr(wf_routes, "SSE_MAX_OPEN_STREAMS", 1)
+    wf_routes.reset_sse_stream_state()
+    try:
+        resp = _direct_stream(client, demo_auth)
+        assert resp.status_code == 200
+        del resp
+        gc.collect()
+        resp2 = _direct_stream(client, demo_auth)  # no false 429
+        assert resp2.status_code == 200
+        del resp2
+        gc.collect()
+        assert wf_routes._SSE_OPEN_STREAMS == 0
+    finally:
+        wf_routes.reset_sse_stream_state()
+
+
+def test_stream_lease_release_is_idempotent(monkeypatch):
+    """V9: double release decrements exactly once, never negative."""
+    monkeypatch.setattr(wf_routes, "SSE_MAX_OPEN_STREAMS", 4)
+    wf_routes.reset_sse_stream_state()
+    lease = wf_routes._try_open_stream()
+    assert wf_routes._SSE_OPEN_STREAMS == 1
+    lease.release()
+    assert wf_routes._SSE_OPEN_STREAMS == 0
+    lease.release()
+    lease.release()
+    assert wf_routes._SSE_OPEN_STREAMS == 0
+
+
+def test_repeated_open_close_cycles_return_to_zero(monkeypatch):
+    """V9: 50 open/release cycles leave the counter at exactly 0."""
+    monkeypatch.setattr(wf_routes, "SSE_MAX_OPEN_STREAMS", 4)
+    wf_routes.reset_sse_stream_state()
+    for _ in range(50):
+        wf_routes._try_open_stream().release()
+    assert wf_routes._SSE_OPEN_STREAMS == 0

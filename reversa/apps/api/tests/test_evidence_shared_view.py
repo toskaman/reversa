@@ -2,8 +2,10 @@
 
 Canonical export (default) keeps full detail for the owning org. The shared
 view omits user-controlled non-chained fields (intent, plan, action
-inputs/output/error) so the bundle can be posted externally, while event
-payloads stay byte-identical so offline `verify_bundle` still returns VALID.
+inputs/output/error, approval actor ids) while event payloads stay
+byte-identical so offline `verify_bundle` still returns VALID. The view is
+INTERNAL ONLY: actor/org/error strings still escape via the identical
+events (V8 audit; V9 omits approvals actors, commitment format deferred).
 """
 import copy
 import json
@@ -59,6 +61,25 @@ def test_shared_view_omits_nonchained_but_verifies(client, demo_auth):
     assert ok is True, message
     ok, _ = verify_bundle(canon)
     assert ok is True
+
+
+def test_shared_view_omits_approval_actor_ids(client, demo_auth):
+    """V9: shared approvals keep status, drop actor ids (non-chained)."""
+    wf_id = _completed(client, demo_auth)
+    h = demo_auth["headers"]
+    canon = client.get(f"/api/v1/workflows/{wf_id}/evidence", headers=h).json()
+    assert len(canon["approvals"]) >= 1
+    assert any(a.get("decided_by") for a in canon["approvals"])
+    shared = client.get(f"/api/v1/workflows/{wf_id}/evidence",
+                        params={"view": "shared"}, headers=h).json()
+    assert len(shared["approvals"]) == len(canon["approvals"])
+    for a in shared["approvals"]:
+        assert "requested_by" not in a and "decided_by" not in a
+        assert "status" in a and "plan_version" in a
+    assert "approvals.requested_by" in shared["redactions"]
+    assert "approvals.decided_by" in shared["redactions"]
+    ok, message = verify_bundle(shared)
+    assert ok is True, message
 
 
 def test_shared_view_unknown_rejected(client, demo_auth):

@@ -74,7 +74,7 @@ Launch Interactive Demo mints its own guest session (60-min TTL, fixed
 ```text
 Browser (Next.js) ──HTTPS──▶ Caddy ──▶ FastAPI + worker ──▶ Postgres 16
         │                          │            │                 │
-   guest JWT                  SSE stream   Vultr Inference   5 demo SQLite
+   opaque bearer              SSE stream   Vultr Inference   5 demo SQLite
    (60-min TTL)               (bounded)    (deepseek flash)  stores (labeled)
 ```
 
@@ -84,8 +84,8 @@ Observed spend $0.28 on 2026-11-05 ($200 credit).
 ## 5. Tests (re-run everything)
 
 - `PYTHONPATH=reversa/apps/api/src python -m pytest
-  reversa/apps/api/tests/ -q` → 787 passed, 1 xfailed (pinned known SSE
-  slot leak, RC10 fix), 2 honest skips (RC9 v0.2.0-rc.9 + V8 audit).
+  reversa/apps/api/tests/ -q` → 792 passed, 2 honest skips
+  (RC10 v0.2.0-rc.10).
 - `python reversa/tests/e2e/smoke_browser.py --token <tok>` → 10/10
   real Chromium.
 - `python reversa/tests/performance/bench.py --base <url> --token <tok>`
@@ -105,13 +105,12 @@ stated openly; the pilot is the instrument that earns them.
 ## 7. Limitations (what we do NOT claim)
 
 Single-model planner; A/B n=12 only; concurrency N=1/5/10 loopback only
-(N≥25/50 + soak not done); single worker + sync SSE bounded best-effort
-(idle 30 s, heartbeat, 32-stream cap, resume via `since_seq`) with a
-known disconnect-before-first-yield slot leak (xfail-pinned, RC10 fix);
-one VM = SPOF (RC9 pre-deploy backup taken; restore TESTED on RC7, RC9
-restore test not run; snapshot taken); no exactly-once on external
+(N≥25/50 + soak not done); single worker + sync SSE bounded
+(idle 30 s, heartbeat, 32-stream cap with idempotent leases, resume via
+`since_seq`); one VM = SPOF (pre-deploy backup taken; restore TESTED on
+RC7, RC10 restore test not run; snapshot taken); no exactly-once on external
 systems; hash chain detects tampering, not absolute immutability; demo
-systems labeled; `?view=shared` internal-only; V2 video ships
+systems labeled; `?view=shared` internal-only (8 redactions); V2 video ships
 (V3 storyboard only); wf41 read-only classified, left in place by design.
 
-Full dossier: `docs/jury/` (01–17). Numbers: RC9 + V8, 2026-11-06.
+Full dossier: `docs/jury/` (01–18). Numbers: RC10, 2026-11-06.

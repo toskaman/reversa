@@ -20,7 +20,8 @@ router = APIRouter(prefix="/api/v1", tags=["evidence"])
 SHARED_VIEW = "shared"
 CANONICAL_VIEW = "canonical"
 SHARED_REDACTIONS = ["workflow.name", "workflow.intent", "plan",
-                     "actions.inputs", "actions.output", "actions.error"]
+                     "actions.inputs", "actions.output", "actions.error",
+                     "approvals.requested_by", "approvals.decided_by"]
 
 
 def _bundle(session, wf: Workflow, org_slug: str,
@@ -45,9 +46,10 @@ def _bundle(session, wf: Workflow, org_slug: str,
         "updated_at": wf.updated_at.isoformat(),
     }
     if shared:
-        # V7-B1: non-chained user-controlled fields are omitted so the
-        # bundle can be posted externally; event payloads stay byte-identical
-        # so offline verification still returns VALID.
+        # V7-B1/V9: non-chained user-controlled fields are omitted. Event
+        # payloads stay byte-identical so offline verification still
+        # returns VALID — the view is INTERNAL ONLY (actor/org/error
+        # strings still escape via events), never "postable".
         workflow = {
             "id": wf.id, "name": f"workflow-{wf.id}", "state": wf.state,
             "plan_version": wf.plan_version,
@@ -86,6 +88,8 @@ def _bundle(session, wf: Workflow, org_slug: str,
              "prev_hash": e.prev_hash, "hash": e.hash} for e in events
         ],
         "approvals": [
+            {"plan_version": a.plan_version, "status": a.status}
+            if shared else
             {"plan_version": a.plan_version, "status": a.status,
              "requested_by": a.requested_by, "decided_by": a.decided_by}
             for a in approvals

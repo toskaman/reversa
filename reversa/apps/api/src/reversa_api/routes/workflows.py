@@ -9,6 +9,7 @@ import secrets
 import threading
 import time
 import uuid
+import weakref
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import JSONResponse, StreamingResponse
@@ -537,7 +538,30 @@ def reset_sse_stream_state() -> None:
         _SSE_OPEN_STREAMS = 0
 
 
-def _try_open_stream() -> None:
+class _StreamLease:
+    """V9: idempotent ownership of one SSE admission slot.
+
+    The slot is reserved by `_try_open_stream()` and released exactly once
+    no matter how many release paths fire (generator `finally` on the
+    normal path, `weakref.finalize` on the response when it is abandoned
+    before/during streaming). Never decrements twice, never below zero.
+    """
+
+    __slots__ = ("_released",)
+
+    def __init__(self) -> None:
+        self._released = False
+
+    def release(self) -> None:
+        global _SSE_OPEN_STREAMS
+        with _SSE_STREAMS_LOCK:
+            if self._released:
+                return
+            self._released = True
+            _SSE_OPEN_STREAMS = max(0, _SSE_OPEN_STREAMS - 1)
+
+
+def _try_open_stream() -> _StreamLease:
     global _SSE_OPEN_STREAMS
     with _SSE_STREAMS_LOCK:
         if _SSE_OPEN_STREAMS >= SSE_MAX_OPEN_STREAMS:
@@ -545,12 +569,17 @@ def _try_open_stream() -> None:
                                 detail="too many open event streams",
                                 headers={"Retry-After": "5"})
         _SSE_OPEN_STREAMS += 1
+        return _StreamLease()
 
 
-def _close_stream() -> None:
-    global _SSE_OPEN_STREAMS
-    with _SSE_STREAMS_LOCK:
-        _SSE_OPEN_STREAMS = max(0, _SSE_OPEN_STREAMS - 1)
+def _close_stream(lease: _StreamLease | None = None) -> None:
+    if lease is None:
+        # Legacy manual path (tests): bare decrement, still clamped.
+        global _SSE_OPEN_STREAMS
+        with _SSE_STREAMS_LOCK:
+            _SSE_OPEN_STREAMS = max(0, _SSE_OPEN_STREAMS - 1)
+        return
+    lease.release()
 
 
 def reset_sse_ticket_state() -> None:
@@ -621,7 +650,9 @@ def stream_events(wf_id: int, request: Request, since_seq: int = 0,
         bearer = credentials.strip() if scheme.lower() == "be" + "arer" else ""
         org = resolve_org_from_token(bearer)
     # V7-B2: 429 when the pool is saturated with live streams.
-    _try_open_stream()
+    # V9: the lease owns the slot; release is idempotent (gen finally +
+    # response finalizer).
+    lease = _try_open_stream()
     try:
         since = since_seq or int(request.headers.get("last-event-id", "0") or 0)
     except (TypeError, ValueError):
@@ -665,7 +696,13 @@ def stream_events(wf_id: int, request: Request, since_seq: int = 0,
                     session.close()
                 time.sleep(0.5)
         finally:
-            _close_stream()
+            lease.release()
 
-    return StreamingResponse(gen(), media_type="text/event-stream",
-                             headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"})
+    resp = StreamingResponse(gen(), media_type="text/event-stream",
+                               headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"})
+    # V9: deterministic cleanup when the response is dropped before or
+    # during streaming (Starlette never closes the sync iterator; close()
+    # on an unstarted generator is a no-op). Idempotent with gen()'s
+    # finally: exactly one release per lease.
+    weakref.finalize(resp, lease.release)
+    return resp

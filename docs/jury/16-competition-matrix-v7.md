@@ -1,21 +1,28 @@
-# Competition matrix — V7 recon (2026-11-06)
+# Competition matrix — V7 recon + V9 refresh (2026-11-06)
 
-Sources: public LabLab event page + project pages (fetched 2026-11-06).
-31 team projects visible; 21 drafts unobservable. No stackable sponsor
-bounties announced (Grand Prize only: $5,000 cash + $3,000 Vultr credits).
+Sources: public LabLab event + live + project pages (fetched 2026-11-06).
+Live board: 57 submissions, 23 drafts in progress, 727 teams. Prizes
+confirmed on the official page: $9,000 cash + $5,000 Vultr credits
+(1st $5,000+$3,000; 2nd $3,000+$1,000; 3rd $1,000+$1,000) + onsite raffle.
+No stackable sponsor bounties beyond the published prize pool.
 
-Challenge split is observed from project pages, not assumed:
+Challenge split is observed from project pages, not assumed. V9 correction:
+sandbox-focused projects are NOT classified as Challenge 2 without an
+explicit statement — the V7 table overstated direct competition.
 
-## Challenge 2 (ours) — agent safety / execution / recovery
+## Challenge 2 (ours) — VERIFIED direct competitor
 
 | Project | Verified evidence | Gap vs REVERSA |
 |---|---|---|
-| Detonation Chamber | Live demo, code-execution sandbox focus | No multi-system recovery proof observed |
-| YAI Guard | Policy-guard demo, public repo | Guard-only; no compensation/evidence chain observed |
-| VOIDLOCK | Containment demo | Containment, not verified recovery |
-| Blast Radius Zero | Blast-radius demo | No offline-verifiable evidence observed |
-| Tripwire Sandbox | Sandbox tripwire demo | Sandbox scope, not enterprise workflows |
-| JARVIS ProofOps | Proof-oriented ops demo | Closest; recovery depth not demonstrated |
+| ARC — Your Company Workspace | Explicitly "targets the Powering the Future of Work challenge"; Flutter web + Python backend on Vultr VM (Atlanta); deterministic scheduler; disposable-container Docker broker; GitHub connected; real terminal job passed. States NO Vultr Serverless Inference use. | Recovery/compensation/verification: not publicly demonstrated in the inspected summary. REVERSA's live proof ARC has not publicly demonstrated: typed reverse-order compensation + offline-verifiable Evidence Passport + judge-injected chaos with recovery manifest. |
+
+## Challenge UNCONFIRMED (sandbox/proof-focused — do not count as direct)
+
+Detonation Chamber, YAI Guard, VOIDLOCK, Blast Radius Zero (solo),
+Tripwire Sandbox, JARVIS ProofOps. Example: JARVIS (synthetic commerce QA,
+disposable Playwright under gVisor) reads as Challenge 1 (Blast Radius
+Zero) but its page states no challenge — recorded as unconfirmed, not as
+a beaten competitor.
 
 ## Challenge 1 (different track — not direct competitors)
 

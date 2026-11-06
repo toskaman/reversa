@@ -23,8 +23,8 @@ and support. No pricing is final; no revenue, customers, or ROI are claimed.
 → execute, owner token only as fallback) → connect one real system in a
 sandbox → paid pilot measured on recovery hours saved.
 
-**Measured proof behind the pitch (RC9 v0.2.0-rc.9 + V8):** 787-test API suite
-green (1 xfailed pinned SSE leak, 2 honest skips), chaos matrix 20/20, 100-case offline planner eval
+**Measured proof behind the pitch (RC10 v0.2.0-rc.10):** 792-test API suite
+green (2 honest skips), chaos matrix 20/20, 100-case offline planner eval
 plus live Vultr Inference campaigns (2×10 + 12-case A/B, 65,553 tokens,
 in-repo aggregates) — baseline 100% schema-valid, 0% refusal, a stated
 limitation.

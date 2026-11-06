@@ -16,6 +16,12 @@ Status : STORYBOARD UNIQUEMENT. Aucun média reconstruit ce cycle.
 Re-render : NON — toolchain partiellement supervisée (voir §5, verdict +
 protocole). Fichier jury : upload LabLab reste `demo-v2.mp4`.
 
+> V9 (2026-11-06, gate §10) : re-audit toolchain — ffmpeg OK, SAPI.SpVoice
+> OK (narration possible), MAIS aucun recorder CLI sur PATH, aucun
+> navigateur Playwright installé (`ms-playwright` vide ; piste Edge-channel
+> non construite/non prouvée, ~2 h supervisées). Décision : NO-GO, V2
+> verrouillée pour la soumission. Risque deadline > gain V3 incertain.
+
 > RC4 (2026-11-05, orchestrateur) : suite 258 → **363 tests**
 > (`CHANGELOG.md` RC4). §1 reste le relevé du cycle 1 (ère rc.3) ;
 > chiffres §2–§4 mis à jour pour le re-render en attente.
@@ -107,18 +113,16 @@ Total estimé : 85,2 + 8 + 6 + 5 + 1 ≈ 105 s de timeline pour ~97 s de VO à
 
 ## 3. Chiffres autorisés / interdits à l'écran
 
-Autorisés UNIQUEMENT (chiffres RC9 + V8, 2026-11-06) : 505 ms /
+Autorisés UNIQUEMENT (chiffres RC10, 2026-11-06) : 505 ms /
 1,78 s / 100 % (n=10 happy, n=5 chaos) / 59 events smoke + 81 chaos /
 15 chaînes (`results.md`, `15-final-verification-rc9.md:26-31`),
 10 actions / 5 systèmes démo / 6 undos + 1 read-only noop,
-787 tests + 1 xfailed (fuite SSE pinnée) + 2 skips (`CHANGELOG.md`),
-20/20 chaos, 100 cas eval + baseline 100 %/0 %
-(`test_ai_eval.py`), `provider: vultr-inference` + « accepted after
-2 attempts » (`05-ai-integration.md:23-26`).
+792 tests + 2 skips (`CHANGELOG.md`), 20/20 chaos, 100 cas eval +
+baseline 100 %/0 % (`test_ai_eval.py`), `provider: vultr-inference` +
+« accepted after 2 attempts » (`05-ai-integration.md:23-26`).
 Interdit : « 7 compensées » sans le noop, `?view=shared` présenté comme
-anonymisé (interne/do-not-post, fuite actor/org/error prouvée — audit V8),
-« dead clients release the worker » sans « best-effort » (fuite slot
-pré-first-yield connue, fix RC10).
+anonymisé (interne/do-not-post, 8 redactions, fuite actor/org/error via
+events — audit V8, omission approvals RC10).
 Interdits : maquettes Recovery Race/Time Machine/Decision Inspector comme
 produit (labels d'onglets visibles = OK, narration muette dessus),
 « AI-powered » sans « engine-verified », footage GitHub (pas de run live

@@ -1,4 +1,4 @@
-# REVERSA — final pitch script (word-for-word, ~3 min, RC9 + V8 numbers)
+# REVERSA — final pitch script (word-for-word, ~3 min, RC10 numbers)
 
 > Read time ~2:50 at pitch pace. Every number below is cited to the doc
 > or run that produced it. Footage: V2 clips + live prod takes only.
@@ -54,18 +54,18 @@ customers, no invented savings."
 
 ## 2:45–3:00 — Closing
 
-"Seven hundred eighty-seven tests green. Twenty of twenty chaos
+"Seven hundred ninety-two tests green. Twenty of twenty chaos
 scenarios. AI agents are becoming the hands of enterprise software.
-REVERSA makes sure their actions have consequences we can verify — and
-failures we can recover from. REVERSA. Reversible where possible.
-Accountable everywhere."
+REVERSA makes their actions verifiable — and their failures recoverable
+where recovery is safe. REVERSA. Reversible where possible. Accountable
+everywhere."
 
 ## Number citations
 
 - 59/81 events, wf90 COMPLETED, wf91 COMPENSATED:
   `15-final-verification-rc9.md:26-31` (live prod, RC9).
-- 787 tests + 1 xfailed + 2 skips: CHANGELOG (V8 audit; xfail pins the
-  known SSE slot leak, RC10 fix).
+- 792 tests + 2 skips: CHANGELOG (RC10; SSE slot leak fixed via
+  idempotent lease, V8 xfail removed).
 - 20/20 chaos: CHANGELOG + `08-business-case.md:26-30`.
 - A/B 10/12 vs 11/12 (+19% tokens): `05-ai-integration.md:108-125`.
 - P50 505 ms / 1.78 s (n=10/n=5): `docs/benchmarks/results.md:16-24`.

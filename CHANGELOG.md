@@ -10,19 +10,31 @@ Skips in all releases are the same two honest conditional skips
 (Vultr live-provider eval, GitHub live cycle); no Vultr/GitHub secrets
 were present in the environment when the counts were observed.
 
-## Unreleased (V8 audit, post-RC9 main)
+## RC10 — SSE slot-leak fix + shared-view approvals omission (0.2.0-rc.10)
 
-- SSE lifecycle: `tests/test_sse_hold.py` +2 tests (consumed-stream slot
-  release passes; never-started-generator slot leak pinned as strict
-  `xfail` — slot opens in the route body, release lives only in `gen()`'s
-  `finally`, and Starlette 1.10.0 never closes the sync iterator).
-  Suite: 787 passed / 1 xfailed / 2 honest skips.
-- Wording corrections (no behavior change): SSE bounds are best-effort
-  (known disconnect-before-first-yield leak, RC10 fix planned);
-  `?view=shared` is internal/do-not-post — events stay byte-identical so
-  actor/org/error strings still escape (RC10: commitment-based format).
-- New jury docs: `docs/jury/START-HERE.md`, `docs/jury/final-pitch.md`,
-  `docs/jury/17-gauntlet-delta-rc9.md` (all overclaims fixed per V8 audit).
+- Commit: TBD (joint API+web bump; tag `v0.2.0-rc.10` after CI + prod
+  verification), 2026-11-06. V8 audit work + V9 engineering.
+- SSE lifecycle FIX: idempotent `_StreamLease` owns each admission slot;
+  release fires from `gen()`'s `finally` (normal path) and from a
+  `weakref.finalize` on the response (abandoned before/during streaming).
+  Exactly one release per lease: no double-decrement, no negative
+  counter, 429-before-stream preserved, cap kept at 32. The V8 strict
+  `xfail` is removed — the original reproducer passes.
+  `tests/test_sse_hold.py` +5 total (consumed-release, unstarted-release,
+  abandon-then-admit, lease idempotency, 50 open/close cycles).
+- Shared view: `?view=shared` now also omits `approvals.requested_by` /
+  `approvals.decided_by` (non-chained actor ids); 8 redactions listed,
+  events still byte-identical, `verify_bundle` still VALID. The view
+  stays INTERNAL/DO-NOT-POST (actor/org/error strings still escape via
+  events; commitment-based format deferred post-submission).
+  `tests/test_evidence_shared_view.py` +1.
+- Jury docs: `docs/jury/START-HERE.md`, `docs/jury/final-pitch.md`,
+  `docs/jury/17-gauntlet-delta-rc9.md`, `docs/jury/SUBMISSION-ACTION-REQUIRED.md`
+  (V9: guest "JWT" → opaque bearer fix, V3 NO-GO re-confirmed, ARC verified
+  as the single confirmed Challenge 2 competitor in matrix 16).
+- API suite: 792 passed / 2 honest skips (787 V8 + 5 new), 0 failures,
+  0 expected-failures.
+- No schema migration (create_all unchanged; no new columns).
 
 ## RC9 — SSE bounds + shareable evidence view (0.2.0-rc.9)
 
